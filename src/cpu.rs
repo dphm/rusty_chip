@@ -18,8 +18,8 @@ impl<'a> Cpu<'a> {
     pub fn new(memory: &'a mut Memory) -> Cpu<'a> {
         Cpu {
             exit: false,
-            pc: 0x0,
-            sp: 0x0,
+            pc: Memory::ROM_RANGE.start,
+            sp: Memory::STACK_RANGE.start,
             i: 0x0,
             v: [0x0; REG_SIZE],
             memory
@@ -31,7 +31,7 @@ impl<'a> Cpu<'a> {
         let operation = self.decode(opcode);
         operation();
 
-        if self.pc + 1 >= Memory::PROGRAM_SIZE {
+        if self.pc + 1 >= Memory::ROM_RANGE.end {
             self.exit = true;
             return;
         }

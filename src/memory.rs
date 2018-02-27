@@ -1,50 +1,58 @@
-const PROGRAM_SIZE: usize = 0x1000 - 0x200;
-const STACK_SIZE: usize = 16;
+const MAX_SIZE: usize = 0x1000;
+const FONT_RANGE: Range<usize> = 0x0..0x200;
+const ROM_RANGE: Range<usize> = 0x200..0xEA0;
+const STACK_RANGE: Range<usize> = 0xEA0..0xF00;
+const DISPLAY_RANGE: Range<usize> = 0xF00..MAX_SIZE;
 
 use std::fmt::{Debug, Display, Formatter, Result};
-use std::ops::{Index, IndexMut};
+use std::ops::{Index, IndexMut, Range};
 
 type Address = usize;
 
 pub struct Memory {
-    program: [u8; PROGRAM_SIZE],
-    stack: Vec<Address>
+    mem: [u8; MAX_SIZE],
+    count: usize
 }
 
 impl Memory {
-    pub fn new() -> Memory {
+    pub const ROM_RANGE: Range<usize> = ROM_RANGE;
+    pub const STACK_RANGE: Range<usize> = STACK_RANGE;
+
+    pub fn new(rom: &Vec<u8>) -> Memory {
         Memory {
-            program: [0x0; PROGRAM_SIZE],
-            stack: Vec::with_capacity(STACK_SIZE)
+            mem: Memory::init_mem(&rom),
+            count: MAX_SIZE
         }
     }
 
-    pub fn push_stack(&mut self, addr: Address) {
-        self.stack.push(addr)
-    }
+    fn init_mem(rom: &Vec<u8>) -> [u8; MAX_SIZE] {
+        let mut mem = [0x0; MAX_SIZE];
 
-    pub fn pop_stack(&mut self) -> Option<Address> {
-        self.stack.pop()
+        for i in 0..rom.len() {
+            mem[i + ROM_RANGE.start] = rom[i];
+        }
+
+        mem
     }
 }
 
 impl Index<Address> for Memory {
     type Output = u8;
 
-    fn index(&self, addr: Address) -> &u8 {
-        &self.program[addr]
+    fn index(&self, addr: Address) -> &Self::Output {
+        &self.mem[addr]
     }
 }
 
 impl IndexMut<Address> for Memory {
     fn index_mut(&mut self, addr: Address) -> &mut u8 {
-        &mut self.program[addr]
+        &mut self.mem[addr]
     }
 }
 
 impl Display for Memory {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        let hex_bytes = self.program.iter()
+        let hex_bytes = self.mem.iter()
             .map(|byte| format!("{:02x}", &byte));
 
         let lines = hex_bytes.enumerate()
@@ -64,10 +72,6 @@ impl Display for Memory {
 
 impl Debug for Memory {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        let hex_stack: Vec<String> = self.stack.iter()
-            .map(|addr| format!("{:04x}", &addr))
-            .collect();
-
-        write!(f, "STACK: [{}]\n\n{}", hex_stack.join(", "), self)
+        write!(f, "{}", self)
     }
 }
