@@ -1,0 +1,6 @@
+[package]
+name = "rusty_chip"
+version = "0.1.0"
+authors = ["quelledanielle <quelledanielle@users.noreply.github.com>"]
+
+[dependencies]
