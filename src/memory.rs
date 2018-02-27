@@ -19,11 +19,11 @@ impl Memory {
         }
     }
 
-    pub fn stack_push(&mut self, addr: Address) {
+    pub fn push_stack(&mut self, addr: Address) {
         self.stack.push(addr)
     }
 
-    pub fn stack_pop(&mut self) -> Option<Address> {
+    pub fn pop_stack(&mut self) -> Option<Address> {
         self.stack.pop()
     }
 }
