@@ -6,6 +6,7 @@ type Address = usize;
 type Opcode = u16;
 
 pub struct Cpu<'a> {
+    pub exit: bool,
     pc: Address,
     sp: Address,
     i: Address,
@@ -16,6 +17,7 @@ pub struct Cpu<'a> {
 impl<'a> Cpu<'a> {
     pub fn new(memory: &'a mut Memory) -> Cpu<'a> {
         Cpu {
+            exit: false,
             pc: 0x0,
             sp: 0x0,
             i: 0x0,
@@ -28,6 +30,11 @@ impl<'a> Cpu<'a> {
         let opcode: Opcode = self.fetch();
         let operation = self.decode(opcode);
         operation();
+
+        if self.pc + 1 >= Memory::PROGRAM_SIZE {
+            self.exit = true;
+            return;
+        }
     }
 
     fn fetch(&mut self) -> Opcode {
@@ -49,7 +56,7 @@ impl<'a> Cpu<'a> {
     }
 
     fn advance_pc(&mut self) {
-        self.pc = self.pc + 1
+        self.pc += 1;
     }
 }
 

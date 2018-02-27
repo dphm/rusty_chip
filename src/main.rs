@@ -11,6 +11,7 @@ fn main() {
     let mut cpu = Cpu::new(&mut memory);
 
     loop {
+        if cpu.exit { return; }
         cpu.step();
     }
 }
