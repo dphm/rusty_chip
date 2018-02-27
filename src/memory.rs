@@ -1,7 +1,8 @@
-use std::ops::{Index, IndexMut};
-
 const PROGRAM_SIZE: usize = 0x1000 - 0x200;
 const STACK_SIZE: usize = 16;
+
+use std::fmt::{Debug, Display, Formatter, Result};
+use std::ops::{Index, IndexMut};
 
 type Address = usize;
 
@@ -38,5 +39,35 @@ impl Index<Address> for Memory {
 impl IndexMut<Address> for Memory {
     fn index_mut(&mut self, addr: Address) -> &mut u8 {
         &mut self.program[addr]
+    }
+}
+
+impl Display for Memory {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        let hex_bytes = self.program.iter()
+            .map(|byte| format!("{:02x}", &byte));
+
+        let lines = hex_bytes.enumerate()
+            .fold(String::new(), |mut acc, (i, hex_byte)| {
+                if i != 0 {
+                    if i % 2 == 0 { acc.push_str(" "); }
+                    if i % 16 == 0 { acc.push_str("\n"); }
+                }
+
+                acc.push_str(&hex_byte);
+                acc
+            });
+
+        write!(f, "{}", lines)
+    }
+}
+
+impl Debug for Memory {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        let hex_stack: Vec<String> = self.stack.iter()
+            .map(|addr| format!("{:04x}", &addr))
+            .collect();
+
+        write!(f, "STACK: [{}]\n\n{}", hex_stack.join(", "), self)
     }
 }
