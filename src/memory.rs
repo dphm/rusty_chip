@@ -18,11 +18,29 @@ pub struct Memory {
 impl Memory {
     pub const ROM_RANGE: Range<Address> = ROM_RANGE;
     pub const STACK_RANGE: Range<Address> = STACK_RANGE;
+    pub const DISPLAY_RANGE: Range<Address> = 0xF00..MAX_SIZE;
 
     pub fn new(rom: &Vec<Byte>) -> Memory {
         Memory {
             mem: Memory::init_mem(&rom)
         }
+    }
+
+    pub fn clear(&mut self, range: Range<Address>) {
+        for i in range.start..range.end {
+            self.mem[i] = 0x0;
+        }
+    }
+
+    pub fn stack_pop(&mut self, sp: Address) -> Address {
+        let addr: Address = (self.mem[sp] as Address) << 8 |
+            (self.mem[sp + 1] as Address);
+        addr
+    }
+
+    pub fn stack_push(&mut self, sp: Address, addr: Address) {
+        self.mem[sp] = (addr & 0xFF00) as Byte;
+        self.mem[sp + 1] = (addr & 0x00FF) as Byte;
     }
 
     fn init_mem(rom: &Vec<Byte>) -> [Byte; MAX_SIZE] {
