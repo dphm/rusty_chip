@@ -1,31 +1,32 @@
 const MAX_SIZE: usize = 0x1000;
-const FONT_RANGE: Range<usize> = 0x0..0x200;
-const ROM_RANGE: Range<usize> = 0x200..0xEA0;
-const STACK_RANGE: Range<usize> = 0xEA0..0xF00;
-const DISPLAY_RANGE: Range<usize> = 0xF00..MAX_SIZE;
+const FONT_RANGE: Range<Address> = 0x0..0x200;
+const ROM_RANGE: Range<Address> = 0x200..0xEA0;
+const STACK_RANGE: Range<Address> = 0xEA0..0xF00;
+const DISPLAY_RANGE: Range<Address> = 0xF00..MAX_SIZE;
 
 use std::fmt::{Debug, Display, Formatter, Result};
 use std::ops::{Index, IndexMut, Range};
 
 type Address = usize;
+type Byte = u8;
 
 pub struct Memory {
-    mem: [u8; MAX_SIZE],
-    count: usize
+    mem: [Byte; MAX_SIZE],
+    count: Address
 }
 
 impl Memory {
-    pub const ROM_RANGE: Range<usize> = ROM_RANGE;
-    pub const STACK_RANGE: Range<usize> = STACK_RANGE;
+    pub const ROM_RANGE: Range<Address> = ROM_RANGE;
+    pub const STACK_RANGE: Range<Address> = STACK_RANGE;
 
-    pub fn new(rom: &Vec<u8>) -> Memory {
+    pub fn new(rom: &Vec<Byte>) -> Memory {
         Memory {
             mem: Memory::init_mem(&rom),
             count: MAX_SIZE
         }
     }
 
-    fn init_mem(rom: &Vec<u8>) -> [u8; MAX_SIZE] {
+    fn init_mem(rom: &Vec<Byte>) -> [Byte; MAX_SIZE] {
         let mut mem = [0x0; MAX_SIZE];
 
         for i in 0..rom.len() {
@@ -37,7 +38,7 @@ impl Memory {
 }
 
 impl Index<Address> for Memory {
-    type Output = u8;
+    type Output = Byte;
 
     fn index(&self, addr: Address) -> &Self::Output {
         &self.mem[addr]
@@ -45,7 +46,7 @@ impl Index<Address> for Memory {
 }
 
 impl IndexMut<Address> for Memory {
-    fn index_mut(&mut self, addr: Address) -> &mut u8 {
+    fn index_mut(&mut self, addr: Address) -> &mut Byte {
         &mut self.mem[addr]
     }
 }

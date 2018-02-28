@@ -1,16 +1,17 @@
-const REG_SIZE: usize = 16;
+const NUM_REGISTERS: usize = 16;
 
 use memory::Memory;
 
 type Address = usize;
 type Opcode = u16;
+type Byte = u8;
 
 pub struct Cpu<'a> {
     pub exit: bool,
     pc: Address,
     sp: Address,
     i: Address,
-    v: [u8; REG_SIZE],
+    v: [Byte; NUM_REGISTERS],
     memory: &'a mut Memory
 }
 
@@ -21,7 +22,7 @@ impl<'a> Cpu<'a> {
             pc: Memory::ROM_RANGE.start,
             sp: Memory::STACK_RANGE.start,
             i: 0x0,
-            v: [0x0; REG_SIZE],
+            v: [0x0; NUM_REGISTERS],
             memory
         }
     }
@@ -38,9 +39,9 @@ impl<'a> Cpu<'a> {
     }
 
     fn fetch(&mut self) -> Opcode {
-        let op_a = self.current_val() as u16;
+        let op_a = self.current_val() as Opcode;
         self.advance_pc();
-        let op_b = self.current_val() as u16;
+        let op_b = self.current_val() as Opcode;
 
         op_a << 8 | op_b
     }
@@ -51,7 +52,7 @@ impl<'a> Cpu<'a> {
         }
     }
 
-    fn current_val(&self) -> u8 {
+    fn current_val(&self) -> Byte {
         self.memory[self.pc]
     }
 
