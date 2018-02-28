@@ -1,12 +1,17 @@
 const NUM_REGISTERS: usize = 16;
 
+extern crate rand;
+
+use self::rand::Rng;
 use memory::Memory;
 use timer::Timer;
+use io::lcd::Lcd;
 
 type Address = usize;
 type Opcode = u16;
 type Byte = u8;
 
+#[derive(Debug)]
 pub struct Cpu<'a> {
     pub exit: bool,
     pc: Address,
@@ -15,11 +20,12 @@ pub struct Cpu<'a> {
     dt: Timer,
     st: Timer,
     v: [Byte; NUM_REGISTERS],
-    memory: &'a mut Memory
+    memory: &'a mut Memory,
+    lcd: &'a mut Lcd
 }
 
 impl<'a> Cpu<'a> {
-    pub fn new(memory: &'a mut Memory) -> Cpu<'a> {
+    pub fn new(memory: &'a mut Memory, lcd: &'a mut Lcd) -> Cpu<'a> {
         Cpu {
             exit: false,
             pc: Memory::ROM_RANGE.start,
@@ -28,7 +34,8 @@ impl<'a> Cpu<'a> {
             dt: Timer::new(60),
             st: Timer::new(60),
             v: [0x0; NUM_REGISTERS],
-            memory
+            memory,
+            lcd
         }
     }
 
@@ -36,9 +43,12 @@ impl<'a> Cpu<'a> {
         let opcode: Opcode = self.fetch();
         self.execute(opcode);
 
+        self.dt.tick();
+        self.st.tick();
+
         if self.pc + 1 >= Memory::ROM_RANGE.end {
             self.exit = true;
-            println!("{}", self.memory);
+            println!("{:?}", self);
             return;
         }
     }
@@ -120,6 +130,66 @@ impl<'a> Cpu<'a> {
                 let vy = self.v[y];
                 self.skip_if_not_equal(vx, vy);
             },
+            0xA => {
+                let nnn = (opcode & 0x0FFF) as Address;
+                self.load_i(nnn);
+            },
+            0xB => {
+                let nnn = (opcode & 0x0FFF) as Address;
+                let v0 = self.v[0];
+                self.jump(nnn + (v0 as Address));
+            },
+            0xC => {
+                let x = (opcode & 0x0F00) as Address;
+                let byte = (opcode & 0x00FF) as Byte;
+                self.random_and(x, byte);
+            },
+            0xD => {
+                let x = (opcode & 0x0F00) as Address;
+                let y = (opcode & 0x00F0) as Address;
+                let n = (opcode & 0x000F) as usize;
+                self.draw_sprite(x, y, n);
+            },
+            0xE => {
+                let x = (opcode & 0x0F00) as Address;
+                match opcode & 0x00FF {
+                    0x9E => (), // skip if key[v[x]] down
+                    0xA1 => (), // skip if key[v[x]] up
+                    _ => ()
+                }
+            },
+            0xF => {
+                let x = (opcode & 0x0F00) as Address;
+                match opcode & 0x00FF {
+                    0x07 => {
+                        let dt = self.dt.current;
+                        self.load(x, dt);
+                    },
+                    0x0A => (), // wait for key press, store value in Vx.
+                    0x15 => {
+                        let vx = self.v[x];
+                        self.dt.set(vx);
+                    },
+                    0x18 => {
+                        let vx = self.v[x];
+                        self.st.set(vx);
+                    },
+                    0x1E => {
+                        let vx = self.v[x];
+                        let addr = self.i.wrapping_add(vx as Address);
+                        self.load_i(addr);
+                    },
+                    0x29 => {
+                        let vx = self.v[x];
+                        let addr = Memory::sprite_addr(vx as Address);
+                        self.load_i(addr);
+                    },
+                    0x33 => self.store_bcd(x),
+                    0x55 => self.store_registers_through(x),
+                    0x65 => self.read_registers_through(x),
+                    _ => ()
+                }
+            },
             _ => ()
         }
     }
@@ -162,6 +232,10 @@ impl<'a> Cpu<'a> {
 
     fn skip_if_not_equal(&mut self, a: Byte, b: Byte) {
         if a != b { self.pc += 2; }
+    }
+
+    fn load_i(&mut self, addr: Address) {
+        self.i = addr;
     }
 
     fn load(&mut self, x: Address, b: Byte) {
@@ -241,5 +315,41 @@ impl<'a> Cpu<'a> {
         }
 
         self.v[x] = self.v[x] << 1;
+    }
+
+    fn random_and(&mut self, x: Address, byte: Byte) {
+        let random_byte: Byte = rand::thread_rng().gen_range(0x0, 0xFF);
+        self.v[x] = byte & random_byte;
+    }
+
+    fn store_bcd(&mut self, x: Address) {
+        let vx = self.v[x];
+        self.memory[self.i] = vx / 100;
+        self.memory[self.i + 1] = vx % 100 / 10;
+        self.memory[self.i + 2] = vx % 10;
+    }
+
+    fn store_registers_through(&mut self, x: Address) {
+        for i in 0..x + 1 {
+            self.memory[self.i + i] = self.v[x];
+        }
+    }
+
+    fn read_registers_through(&mut self, x: Address) {
+        for i in 0..x + 1 {
+            self.v[i] = self.memory[self.i + i];
+        }
+    }
+
+    fn draw_sprite(&mut self, x: Address, y: Address, n: usize) {
+        let point = (self.v[x], self.v[y]);
+        for i in 0..n {
+            let collision: bool = self.lcd.draw((self.v[x], self.v[y]), self.memory[self.i + i]);
+            if collision {
+                self.set_flag(0b1);
+            } else {
+                self.set_flag(0b0);
+            }
+        }
     }
 }

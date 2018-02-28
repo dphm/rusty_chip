@@ -11,11 +11,13 @@ use std::path::Path;
 
 use cpu::Cpu;
 use memory::Memory;
+use io::lcd::Lcd;
 
 fn main() {
     let rom = read_bytes("rom/logo.ch8").expect("Unable to load ROM");
+    let mut lcd = Lcd::new();
     let mut memory = Memory::new(&rom);
-    let mut cpu = Cpu::new(&mut memory);
+    let mut cpu = Cpu::new(&mut memory, &mut lcd);
 
     loop {
         if cpu.exit { break; }
