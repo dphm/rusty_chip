@@ -2,6 +2,7 @@
 
 mod cpu;
 mod memory;
+mod io;
 
 use std::io::{Error, Read};
 use std::fs::File;
