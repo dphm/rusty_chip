@@ -87,6 +87,39 @@ impl<'a> Cpu<'a> {
                 let vy = self.v[y];
                 self.skip_if_equal(vx, vy);
             },
+            0x6 => {
+                let x = (opcode & 0x0F00) as Address;
+                let byte = (opcode & 0x00FF) as Byte;
+                self.load(x, byte);
+            },
+            0x7 => {
+                let x = (opcode & 0x0F00) as Address;
+                let byte = (opcode & 0x00FF) as Byte;
+                self.add(x, byte);
+            },
+            0x8 => {
+                let x = (opcode & 0x0F00) as Address;
+                let y = (opcode & 0x00F0) as Address;
+                let f = (opcode & 0x000F) as Byte;
+                match f {
+                    0x1 => self.or(x, y),
+                    0x2 => self.and(x, y),
+                    0x3 => self.xor(x, y),
+                    0x4 => self.add_with_carry(x, y),
+                    0x5 => self.subtract_without_borrow(x, y),
+                    0x6 => self.shift_right(x),
+                    0x7 => self.subtract_neg_without_borrow(x, y),
+                    0xE => self.shift_left(x),
+                    _ => ()
+                }
+            },
+            0x9 => {
+                let x = (opcode & 0x0F00) as Address;
+                let y = (opcode & 0x00F0) as Address;
+                let vx = self.v[x];
+                let vy = self.v[y];
+                self.skip_if_not_equal(vx, vy);
+            },
             _ => ()
         }
     }
@@ -97,6 +130,10 @@ impl<'a> Cpu<'a> {
 
     fn advance_pc(&mut self) {
         self.pc += 1;
+    }
+
+    fn set_flag(&mut self, val: Byte) {
+        self.v[0xF] = val;
     }
 
     fn clear_display(&mut self) {
@@ -125,5 +162,84 @@ impl<'a> Cpu<'a> {
 
     fn skip_if_not_equal(&mut self, a: Byte, b: Byte) {
         if a != b { self.pc += 2; }
+    }
+
+    fn load(&mut self, x: Address, b: Byte) {
+        self.v[x] = b;
+    }
+
+    fn add(&mut self, x: Address, b: Byte) {
+        self.v[x] = self.v[x].wrapping_add(b);
+    }
+
+    fn or(&mut self, x: Address, y: Address) {
+        self.v[x] = self.v[x] | self.v[y];
+    }
+
+    fn and(&mut self, x: Address, y: Address) {
+        self.v[x] = self.v[x] & self.v[y];
+    }
+
+    fn xor(&mut self, x: Address, y: Address) {
+        self.v[x] = self.v[x] ^ self.v[y];
+    }
+
+    fn add_with_carry(&mut self, x: Address, y: Address) {
+        let vx = self.v[x];
+        let vy = self.v[y];
+        self.v[x] = vx.wrapping_add(vy);
+
+        if (vx as u16) + (vy as u16) > 0xFF {
+            self.set_flag(0b1);
+        } else {
+            self.set_flag(0b0);
+        }
+    }
+
+    fn subtract_without_borrow(&mut self, x: Address, y: Address) {
+        let vx = self.v[x];
+        let vy = self.v[y];
+        self.v[x] = vx.wrapping_sub(vy);
+
+        if vx >= vy {
+            self.set_flag(0b1);
+        } else {
+            self.set_flag(0b0);
+        }
+    }
+
+    fn subtract_neg_without_borrow(&mut self, x: Address, y: Address) {
+        let vx = self.v[x];
+        let vy = self.v[y];
+        self.v[x]= vy.wrapping_sub(vx);
+
+        if vx < vy {
+            self.set_flag(0b1);
+        } else {
+            self.set_flag(0b0);
+        }
+    }
+
+    fn shift_right(&mut self, x: Address) {
+        let mut bit_string = format!("{:b}", x);
+        let last = (bit_string.len() - 1) as usize;
+        match bit_string.remove(last) {
+            '1' => self.set_flag(0b1),
+            '0' => self.set_flag(0b0),
+            _ => panic!("Failed to set flag")
+        }
+
+        self.v[x] = self.v[x] >> 1;
+    }
+
+    fn shift_left(&mut self, x: Address) {
+        let mut bit_string = format!("{:b}", x);
+        match bit_string.remove(0) {
+            '1' => self.set_flag(0b1),
+            '0' => self.set_flag(0b0),
+            _ => panic!("Failed to set flag")
+        }
+
+        self.v[x] = self.v[x] << 1;
     }
 }
