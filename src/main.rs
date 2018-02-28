@@ -2,6 +2,7 @@
 
 mod cpu;
 mod memory;
+mod timer;
 mod io;
 
 use std::io::{Error, Read};

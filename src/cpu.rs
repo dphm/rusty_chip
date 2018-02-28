@@ -1,6 +1,7 @@
 const NUM_REGISTERS: usize = 16;
 
 use memory::Memory;
+use timer::Timer;
 
 type Address = usize;
 type Opcode = u16;
@@ -11,6 +12,8 @@ pub struct Cpu<'a> {
     pc: Address,
     sp: Address,
     i: Address,
+    dt: Timer,
+    st: Timer,
     v: [Byte; NUM_REGISTERS],
     memory: &'a mut Memory
 }
@@ -22,6 +25,8 @@ impl<'a> Cpu<'a> {
             pc: Memory::ROM_RANGE.start,
             sp: Memory::STACK_RANGE.start,
             i: 0x0,
+            dt: Timer::new(60),
+            st: Timer::new(60),
             v: [0x0; NUM_REGISTERS],
             memory
         }
