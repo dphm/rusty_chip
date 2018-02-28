@@ -39,6 +39,7 @@ impl<'a> Cpu<'a> {
 
         if self.pc + 1 >= Memory::ROM_RANGE.end {
             self.exit = true;
+            println!("{}", self.memory);
             return;
         }
     }
