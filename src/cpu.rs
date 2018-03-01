@@ -6,6 +6,7 @@ use self::rand::Rng;
 use memory::Memory;
 use timer::Timer;
 use io::lcd::Lcd;
+use io::font;
 
 type Address = usize;
 type Opcode = u16;
@@ -181,7 +182,7 @@ impl<'a> Cpu<'a> {
                     },
                     0x29 => {
                         let vx = self.v[x];
-                        let addr = Memory::sprite_addr(vx as Address);
+                        let addr = font::sprite_addr(vx as Address);
                         self.load_i(addr);
                     },
                     0x33 => self.store_bcd(x),

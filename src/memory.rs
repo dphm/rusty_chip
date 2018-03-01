@@ -41,10 +41,6 @@ impl Memory {
         self.mem[*sp + 1] = (*addr & 0x00FF) as Byte;
     }
 
-    pub fn sprite_addr(digit: Address) -> Address {
-        digit * font::SPRITE_LEN + FONT_RANGE.start
-    }
-
     fn init_mem(rom: &Vec<Byte>) -> [Byte; MAX_SIZE] {
         let mut mem = [0x0; MAX_SIZE];
 
@@ -56,9 +52,7 @@ impl Memory {
 
     fn load_font(mem: &mut [Byte]) {
         for i in 0..font::FONT_SET.len() {
-            for j in 0..font::SPRITE_LEN {
-                mem[Memory::sprite_addr(i) + j] = font::FONT_SET[i][j];
-            }
+            mem[FONT_RANGE.start + i] = font::FONT_SET[i];
         }
     }
 
