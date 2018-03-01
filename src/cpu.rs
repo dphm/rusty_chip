@@ -207,11 +207,11 @@ impl<'a> Cpu<'a> {
     }
 
     fn clear_display(&mut self) {
-        self.memory.clear(Memory::DISPLAY_RANGE)
+        self.memory.clear(&Memory::DISPLAY_RANGE)
     }
 
     fn return_from_subroutine(&mut self) {
-        let addr: Address = self.memory.stack_pop(self.sp);
+        let addr: Address = self.memory.stack_pop(&self.sp);
         self.sp -= 2;
         self.pc = addr;
     }
@@ -221,7 +221,7 @@ impl<'a> Cpu<'a> {
     }
 
     fn call_subroutine(&mut self, addr: Address) {
-        self.memory.stack_push(self.sp, self.pc);
+        self.memory.stack_push(&self.sp, &self.pc);
         self.sp += 2;
         self.pc = addr;
     }

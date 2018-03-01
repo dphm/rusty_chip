@@ -26,21 +26,19 @@ impl Memory {
         }
     }
 
-    pub fn clear(&mut self, range: Range<Address>) {
+    pub fn clear(&mut self, range: &Range<Address>) {
         for i in range.start..range.end {
             self.mem[i] = 0x0;
         }
     }
 
-    pub fn stack_pop(&mut self, sp: Address) -> Address {
-        let addr: Address = (self.mem[sp] as Address) << 8 |
-            (self.mem[sp + 1] as Address);
-        addr
+    pub fn stack_pop(&mut self, sp: &Address) -> Address {
+        (self.mem[*sp] as Address) << 8 | (self.mem[*sp + 1] as Address)
     }
 
-    pub fn stack_push(&mut self, sp: Address, addr: Address) {
-        self.mem[sp] = (addr & 0xFF00) as Byte;
-        self.mem[sp + 1] = (addr & 0x00FF) as Byte;
+    pub fn stack_push(&mut self, sp: &Address, addr: &Address) {
+        self.mem[*sp] = ((*addr & 0xFF00) >> 8) as Byte;
+        self.mem[*sp + 1] = (*addr & 0x00FF) as Byte;
     }
 
     pub fn sprite_addr(digit: Address) -> Address {
@@ -106,5 +104,96 @@ impl Display for Memory {
 impl Debug for Memory {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "{}", self)
+    }
+}
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+
+    #[test]
+    fn new_loads_font() {
+        let r = Vec::new();
+        let m = Memory::new(&r);
+        let font_set: [Byte; 80] = [
+            0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+            0x20, 0x60, 0x20, 0x20, 0x70, // 1
+            0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+            0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+            0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+            0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+            0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+            0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+            0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+            0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+            0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+            0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+            0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+            0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+            0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+            0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+        ];
+
+        for i in 0..font_set.len() {
+            assert_eq!(font_set[i], m[FONT_RANGE.start + i]);
+        }
+    }
+
+    #[test]
+    fn new_loads_rom() {
+        let mut r = Vec::new();
+        let bytes: [Byte; 4] = [0xAB, 0xCD, 0xEF, 0x60];
+        for byte in bytes.iter() {
+            r.push(*byte);
+        }
+
+        let m = Memory::new(&r);
+        for i in 0..bytes.len() {
+            assert_eq!(bytes[0 + i], m[ROM_RANGE.start + i]);
+        }
+    }
+
+    #[test]
+    fn clear_resets_bytes_in_range() {
+        let clear_range: Range<Address> = (FONT_RANGE.start + 10)..(FONT_RANGE.start + 20);
+        let r = Vec::new();
+        let mut m = Memory::new(&r);
+        let expected: [Byte; 30] = [
+            0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+            0x20, 0x60, 0x20, 0x20, 0x70, // 1
+            0x00, 0x00, 0x00, 0x00, 0x00, // 2
+            0x00, 0x00, 0x00, 0x00, 0x00, // 3
+            0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+            0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+        ];
+
+        m.clear(&clear_range);
+        for i in 0..expected.len() {
+            assert_eq!(expected[i], m[FONT_RANGE.start + i]);
+        }
+    }
+
+    #[test]
+    fn stack_push() {
+        let r = Vec::new();
+        let mut m = Memory::new(&r);
+        let sp: Address = STACK_RANGE.start;
+        let addr: Address = 0xABCD;
+
+        m.stack_push(&sp, &addr);
+        assert_eq!(0xAB, m[sp]);
+        assert_eq!(0xCD, m[sp + 1]);
+    }
+
+    #[test]
+    fn stack_pop() {
+        let r = Vec::new();
+        let mut m = Memory::new(&r);
+        let sp: Address = STACK_RANGE.start;
+        m[sp] = 0xAB;
+        m[sp + 1] = 0xCD;
+
+        let addr: Address = m.stack_pop(&sp);
+        assert_eq!(0xABCD, addr);
     }
 }
