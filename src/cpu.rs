@@ -63,51 +63,51 @@ impl<'a> Cpu<'a> {
 
     fn execute(&mut self, opcode: Opcode) {
         match opcode & 0xF000 {
-            0x0 => {
+            0x0000 => {
                 match opcode & 0x00FF {
                     0xE0 => self.clear_display(),
                     0xEE => self.return_from_subroutine(),
                     _ => ()
                 }
             },
-            0x1 => {
+            0x1000 => {
                 let nnn = (opcode & 0x0FFF) as Address;
                 self.jump(nnn);
             },
-            0x2 => {
+            0x2000 => {
                 let nnn = (opcode & 0x0FFF) as Address;
                 self.call_subroutine(nnn);
             },
-            0x3 => {
+            0x3000 => {
                 let x = (opcode & 0x0F00) as Address;
                 let byte = (opcode & 0x00FF) as Byte;
                 let vx = self.v[x];
                 self.skip_if_equal(vx, byte);
             },
-            0x4 => {
+            0x4000 => {
                 let x = (opcode & 0x0F00) as Address;
                 let byte = (opcode & 0x00FF) as Byte;
                 let vx = self.v[x];
                 self.skip_if_not_equal(vx, byte);
             },
-            0x5 => {
+            0x5000 => {
                 let x = (opcode & 0x0F00) as Address;
                 let y = (opcode & 0x00F0) as Address;
                 let vx = self.v[x];
                 let vy = self.v[y];
                 self.skip_if_equal(vx, vy);
             },
-            0x6 => {
+            0x6000 => {
                 let x = (opcode & 0x0F00) as Address;
                 let byte = (opcode & 0x00FF) as Byte;
                 self.load(x, byte);
             },
-            0x7 => {
+            0x7000 => {
                 let x = (opcode & 0x0F00) as Address;
                 let byte = (opcode & 0x00FF) as Byte;
                 self.add(x, byte);
             },
-            0x8 => {
+            0x8000 => {
                 let x = (opcode & 0x0F00) as Address;
                 let y = (opcode & 0x00F0) as Address;
                 let f = (opcode & 0x000F) as Byte;
@@ -123,34 +123,34 @@ impl<'a> Cpu<'a> {
                     _ => ()
                 }
             },
-            0x9 => {
+            0x9000 => {
                 let x = (opcode & 0x0F00) as Address;
                 let y = (opcode & 0x00F0) as Address;
                 let vx = self.v[x];
                 let vy = self.v[y];
                 self.skip_if_not_equal(vx, vy);
             },
-            0xA => {
+            0xA000 => {
                 let nnn = (opcode & 0x0FFF) as Address;
                 self.load_i(nnn);
             },
-            0xB => {
+            0xB000 => {
                 let nnn = (opcode & 0x0FFF) as Address;
                 let v0 = self.v[0];
                 self.jump(nnn + (v0 as Address));
             },
-            0xC => {
+            0xC000 => {
                 let x = (opcode & 0x0F00) as Address;
                 let byte = (opcode & 0x00FF) as Byte;
                 self.random_and(x, byte);
             },
-            0xD => {
+            0xD000 => {
                 let x = (opcode & 0x0F00) as Address;
                 let y = (opcode & 0x00F0) as Address;
                 let n = (opcode & 0x000F) as usize;
                 self.draw_sprite(x, y, n);
             },
-            0xE => {
+            0xE000 => {
                 let x = (opcode & 0x0F00) as Address;
                 match opcode & 0x00FF {
                     0x9E => (), // skip if key[v[x]] down
@@ -158,7 +158,7 @@ impl<'a> Cpu<'a> {
                     _ => ()
                 }
             },
-            0xF => {
+            0xF000 => {
                 let x = (opcode & 0x0F00) as Address;
                 match opcode & 0x00FF {
                     0x07 => {
