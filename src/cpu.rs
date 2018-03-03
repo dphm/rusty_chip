@@ -332,7 +332,7 @@ impl<'a> Cpu<'a> {
 
     fn store_registers_through(&mut self, x: Address) {
         for i in 0..x + 1 {
-            self.memory[self.i + i] = self.v[x];
+            self.memory[self.i + i] = self.v[i];
         }
     }
 
