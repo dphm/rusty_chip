@@ -2,8 +2,9 @@ type Address = usize;
 type Byte = u8;
 
 pub const NUM_SPRITES: usize = 16;
-pub const SPRITE_LEN: usize = 5;
-pub const FONT_SET: [Byte; NUM_SPRITES * SPRITE_LEN] = [
+pub const SPRITE_WIDTH: usize = 8;
+pub const SPRITE_HEIGHT: usize = 5;
+pub const FONT_SET: [Byte; NUM_SPRITES * SPRITE_HEIGHT] = [
     // 0
     0b11110000,
     0b10010000,
@@ -103,7 +104,7 @@ pub const FONT_SET: [Byte; NUM_SPRITES * SPRITE_LEN] = [
 ];
 
 pub fn sprite_addr(digit: Byte) -> Address {
-    (digit as Address) * SPRITE_LEN
+    (digit as Address) * SPRITE_HEIGHT
 }
 
 #[cfg(test)]
