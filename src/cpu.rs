@@ -5,7 +5,6 @@ extern crate rand;
 use self::rand::Rng;
 use memory::Memory;
 use timer::Timer;
-use io::lcd::Lcd;
 use io::font;
 
 type Address = usize;
@@ -21,22 +20,20 @@ pub struct Cpu<'a> {
     dt: Timer,
     st: Timer,
     v: [Byte; NUM_REGISTERS],
-    memory: &'a mut Memory,
-    lcd: &'a mut Lcd
+    memory: &'a mut Memory
 }
 
 impl<'a> Cpu<'a> {
-    pub fn new(memory: &'a mut Memory, lcd: &'a mut Lcd) -> Cpu<'a> {
+    pub fn new(memory: &'a mut Memory) -> Cpu<'a> {
         Cpu {
             exit: false,
             pc: Memory::ROM_RANGE.start,
-            sp: Memory::STACK_RANGE.start,
+            sp: Memory::STACK_RANGE.start - 2,
             i: 0x0,
             dt: Timer::new(60),
             st: Timer::new(60),
             v: [0x0; NUM_REGISTERS],
-            memory,
-            lcd
+            memory
         }
     }
 
@@ -59,10 +56,16 @@ impl<'a> Cpu<'a> {
         self.advance_pc();
         let op_b = self.current_val() as Opcode;
 
-        op_a << 8 | op_b
+        (op_a << 8) | op_b
     }
 
     fn execute(&mut self, opcode: Opcode) {
+        let nnn = (opcode & 0x0FFF) as Address;
+        let x = ((opcode & 0x0F00) >> 8) as Address;
+        let y = ((opcode & 0x00F0) >> 4) as Address;
+        let kk = (opcode & 0x00FF) as Byte;
+        let k = (opcode & 0x000F) as Byte;
+
         match opcode & 0xF000 {
             0x0000 => {
                 match opcode & 0x00FF {
@@ -72,47 +75,32 @@ impl<'a> Cpu<'a> {
                 }
             },
             0x1000 => {
-                let nnn = (opcode & 0x0FFF) as Address;
                 self.jump(nnn);
             },
             0x2000 => {
-                let nnn = (opcode & 0x0FFF) as Address;
                 self.call_subroutine(nnn);
             },
             0x3000 => {
-                let x = (opcode & 0x0F00) as Address;
-                let byte = (opcode & 0x00FF) as Byte;
                 let vx = self.v[x];
-                self.skip_if_equal(vx, byte);
+                self.skip_if_equal(vx, kk);
             },
             0x4000 => {
-                let x = (opcode & 0x0F00) as Address;
-                let byte = (opcode & 0x00FF) as Byte;
                 let vx = self.v[x];
-                self.skip_if_not_equal(vx, byte);
+                self.skip_if_not_equal(vx, kk);
             },
             0x5000 => {
-                let x = (opcode & 0x0F00) as Address;
-                let y = (opcode & 0x00F0) as Address;
                 let vx = self.v[x];
                 let vy = self.v[y];
                 self.skip_if_equal(vx, vy);
             },
             0x6000 => {
-                let x = (opcode & 0x0F00) as Address;
-                let byte = (opcode & 0x00FF) as Byte;
-                self.load(x, byte);
+                self.load(x, kk);
             },
             0x7000 => {
-                let x = (opcode & 0x0F00) as Address;
-                let byte = (opcode & 0x00FF) as Byte;
-                self.add(x, byte);
+                self.add(x, kk);
             },
             0x8000 => {
-                let x = (opcode & 0x0F00) as Address;
-                let y = (opcode & 0x00F0) as Address;
-                let f = (opcode & 0x000F) as Byte;
-                match f {
+                match k {
                     0x1 => self.or(x, y),
                     0x2 => self.and(x, y),
                     0x3 => self.xor(x, y),
@@ -125,43 +113,32 @@ impl<'a> Cpu<'a> {
                 }
             },
             0x9000 => {
-                let x = (opcode & 0x0F00) as Address;
-                let y = (opcode & 0x00F0) as Address;
                 let vx = self.v[x];
                 let vy = self.v[y];
                 self.skip_if_not_equal(vx, vy);
             },
             0xA000 => {
-                let nnn = (opcode & 0x0FFF) as Address;
                 self.load_i(nnn);
             },
             0xB000 => {
-                let nnn = (opcode & 0x0FFF) as Address;
                 let v0 = self.v[0];
                 self.jump(nnn + (v0 as Address));
             },
             0xC000 => {
-                let x = (opcode & 0x0F00) as Address;
-                let byte = (opcode & 0x00FF) as Byte;
-                self.random_and(x, byte);
+                self.random_and(x, kk);
             },
             0xD000 => {
-                let x = (opcode & 0x0F00) as Address;
-                let y = (opcode & 0x00F0) as Address;
-                let n = (opcode & 0x000F) as usize;
-                self.draw_sprite(x, y, n);
+                self.draw_sprite(x, y, k as usize);
             },
             0xE000 => {
-                let x = (opcode & 0x0F00) as Address;
-                match opcode & 0x00FF {
+                match kk {
                     0x9E => (), // skip if key[v[x]] down
                     0xA1 => (), // skip if key[v[x]] up
                     _ => ()
                 }
             },
             0xF000 => {
-                let x = (opcode & 0x0F00) as Address;
-                match opcode & 0x00FF {
+                match kk {
                     0x07 => {
                         let dt = self.dt.current;
                         self.load(x, dt);
@@ -212,9 +189,10 @@ impl<'a> Cpu<'a> {
     }
 
     fn return_from_subroutine(&mut self) {
-        let addr: Address = self.memory.stack_pop(&self.sp);
+        if self.sp < Memory::STACK_RANGE.start { return; }
+
+        self.pc = self.memory.stack_pop(&self.sp);
         self.sp -= 2;
-        self.pc = addr;
     }
 
     fn jump(&mut self, addr: Address) {
@@ -222,8 +200,10 @@ impl<'a> Cpu<'a> {
     }
 
     fn call_subroutine(&mut self, addr: Address) {
-        self.memory.stack_push(&self.sp, &self.pc);
+        if self.sp + 2 >= Memory::STACK_RANGE.end { return; }
+
         self.sp += 2;
+        self.memory.stack_push(&self.sp, &self.pc);
         self.pc = addr;
     }
 
@@ -286,9 +266,9 @@ impl<'a> Cpu<'a> {
     fn subtract_neg_without_borrow(&mut self, x: Address, y: Address) {
         let vx = self.v[x];
         let vy = self.v[y];
-        self.v[x]= vy.wrapping_sub(vx);
+        self.v[x] = vy.wrapping_sub(vx);
 
-        if vx < vy {
+        if vx <= vy {
             self.set_flag(0b1);
         } else {
             self.set_flag(0b0);
@@ -296,25 +276,14 @@ impl<'a> Cpu<'a> {
     }
 
     fn shift_right(&mut self, x: Address) {
-        let mut bit_string = format!("{:b}", x);
-        let last = (bit_string.len() - 1) as usize;
-        match bit_string.remove(last) {
-            '1' => self.set_flag(0b1),
-            '0' => self.set_flag(0b0),
-            _ => panic!("Failed to set flag")
-        }
-
+        let least_sig = self.v[x] % 2;
+        self.set_flag(least_sig);
         self.v[x] = self.v[x] >> 1;
     }
 
     fn shift_left(&mut self, x: Address) {
-        let mut bit_string = format!("{:b}", x);
-        match bit_string.remove(0) {
-            '1' => self.set_flag(0b1),
-            '0' => self.set_flag(0b0),
-            _ => panic!("Failed to set flag")
-        }
-
+        let most_sig = self.v[x] >> 7;
+        self.set_flag(most_sig);
         self.v[x] = self.v[x] << 1;
     }
 
@@ -343,14 +312,343 @@ impl<'a> Cpu<'a> {
     }
 
     fn draw_sprite(&mut self, x: Address, y: Address, n: usize) {
-        let point = (self.v[x], self.v[y]);
-        for i in 0..n {
-            let collision: bool = self.lcd.draw((self.v[x], self.v[y]), self.memory[self.i + i]);
-            if collision {
-                self.set_flag(0b1);
-            } else {
-                self.set_flag(0b0);
-            }
+        // Draw n-byte sprite with memory starting at I at (x, y)
+        // Set flag if collision
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn opcode_00e0_clear_display() {
+        let rom = Vec::new();
+        let mut mem = Memory::new(&rom);
+        let mut cpu = Cpu::new(&mut mem);
+
+        for i in Memory::DISPLAY_RANGE {
+            cpu.memory[i] = 0xFF;
+            assert_eq!(0xFF, cpu.memory[i]);
         }
+
+        cpu.execute(0x00E0);
+        for i in Memory::DISPLAY_RANGE {
+            assert_eq!(0x0, cpu.memory[i]);
+        }
+    }
+
+    #[test]
+    fn opcode_00ee_return_from_subroutine() {
+        let rom = Vec::new();
+        let mut mem = Memory::new(&rom);
+        let mut cpu = Cpu::new(&mut mem);
+
+        cpu.memory[Memory::STACK_RANGE.start] = 0x03;
+        cpu.memory[Memory::STACK_RANGE.start + 1] = 0x45;
+        cpu.sp += 2;
+
+        cpu.execute(0x00EE);
+        assert_eq!(Memory::STACK_RANGE.start - 2, cpu.sp);
+        assert_eq!(0x0345, cpu.pc);
+    }
+
+    #[test]
+    fn opcode_1nnn_jump() {
+        let rom = Vec::new();
+        let mut mem = Memory::new(&rom);
+        let mut cpu = Cpu::new(&mut mem);
+
+        cpu.execute(0x1234);
+        assert_eq!(0x234, cpu.pc);
+    }
+
+    #[test]
+    fn opcode_2nnn_call_subroutine() {
+        let rom = Vec::new();
+        let mut mem = Memory::new(&rom);
+        let mut cpu = Cpu::new(&mut mem);
+        cpu.pc = 0x234;
+
+        cpu.execute(0x2456);
+        assert_eq!(0x02, cpu.memory[Memory::STACK_RANGE.start]);
+        assert_eq!(0x34, cpu.memory[Memory::STACK_RANGE.start + 1]);
+        assert_eq!(Memory::STACK_RANGE.start, cpu.sp);
+        assert_eq!(0x456, cpu.pc);
+    }
+
+    #[test]
+    fn opcode_3xkk_skip_if_equal() {
+        let rom = Vec::new();
+        let mut mem = Memory::new(&rom);
+        let mut cpu = Cpu::new(&mut mem);
+
+        let pc = cpu.pc;
+        let x = 0xA;
+        let kk = 0xBC;
+
+        cpu.v[x] = kk + 1;
+        cpu.execute(0x3ABC);
+        assert_eq!(pc, cpu.pc);
+
+        cpu.v[x] = kk;
+        cpu.execute(0x3ABC);
+        assert_eq!(pc + 2, cpu.pc);
+    }
+
+    #[test]
+    fn opcode_4xkk_skip_if_not_equal() {
+        let rom = Vec::new();
+        let mut mem = Memory::new(&rom);
+        let mut cpu = Cpu::new(&mut mem);
+
+        let pc = cpu.pc;
+        let x = 0xA;
+        let kk = 0xBC;
+
+        cpu.v[x] = kk;
+        cpu.execute(0x4ABC);
+        assert_eq!(pc, cpu.pc);
+
+        cpu.v[x] = kk + 1;
+        cpu.execute(0x4ABC);
+        assert_eq!(pc + 2, cpu.pc);
+    }
+
+    #[test]
+    fn opcode_5xy0_skip_if_equal() {
+        let rom = Vec::new();
+        let mut mem = Memory::new(&rom);
+        let mut cpu = Cpu::new(&mut mem);
+
+        let pc = cpu.pc;
+        let x = 0xA;
+        let y = 0xB;
+        cpu.v[x] = 0xBC;
+
+        cpu.v[y] = cpu.v[x] + 1;
+        cpu.execute(0x5AB0);
+        assert_eq!(pc, cpu.pc);
+
+        cpu.v[y] = cpu.v[x];
+        cpu.execute(0x5AB0);
+        assert_eq!(pc + 2, cpu.pc);
+    }
+
+    #[test]
+    fn opcode_6xkk_load() {
+        let rom = Vec::new();
+        let mut mem = Memory::new(&rom);
+        let mut cpu = Cpu::new(&mut mem);
+
+        cpu.execute(0x6ABC);
+        assert_eq!(0xBC, cpu.v[0xA]);
+    }
+
+    #[test]
+    fn opcode_7xkk_add() {
+        let rom = Vec::new();
+        let mut mem = Memory::new(&rom);
+        let mut cpu = Cpu::new(&mut mem);
+
+        cpu.execute(0x7AFF);
+        assert_eq!(0xFF, cpu.v[0xA]);
+
+        cpu.execute(0x7AFF);
+        assert_eq!(0xFE, cpu.v[0xA]);
+    }
+
+    #[test]
+    fn opcode_8xy1_or() {
+        let rom = Vec::new();
+        let mut mem = Memory::new(&rom);
+        let mut cpu = Cpu::new(&mut mem);
+
+        let x = 0xA;
+        let y = 0xB;
+
+        cpu.v[x] = 0b1;
+        cpu.v[y] = 0b0;
+        cpu.execute(0x8AB1);
+        assert_eq!(0b1, cpu.v[x]);
+
+        cpu.v[x] = 0b0;
+        cpu.v[y] = 0b1;
+        cpu.execute(0x8AB1);
+        assert_eq!(0b1, cpu.v[x]);
+
+        cpu.v[x] = 0b0;
+        cpu.v[y] = 0b0;
+        cpu.execute(0x8AB1);
+        assert_eq!(0b0, cpu.v[x]);
+
+        cpu.v[x] = 0b1;
+        cpu.v[y] = 0b1;
+        cpu.execute(0x8AB1);
+        assert_eq!(0b1, cpu.v[x]);
+    }
+
+    #[test]
+    fn opcode_8xy2_and() {
+        let rom = Vec::new();
+        let mut mem = Memory::new(&rom);
+        let mut cpu = Cpu::new(&mut mem);
+
+        let x = 0xA;
+        let y = 0xB;
+
+        cpu.v[x] = 0b1;
+        cpu.v[y] = 0b0;
+        cpu.execute(0x8AB2);
+        assert_eq!(0b0, cpu.v[x]);
+
+        cpu.v[x] = 0b0;
+        cpu.v[y] = 0b1;
+        cpu.execute(0x8AB2);
+        assert_eq!(0b0, cpu.v[x]);
+
+        cpu.v[x] = 0b0;
+        cpu.v[y] = 0b0;
+        cpu.execute(0x8AB2);
+        assert_eq!(0b0, cpu.v[x]);
+
+        cpu.v[x] = 0b1;
+        cpu.v[y] = 0b1;
+        cpu.execute(0x8AB2);
+        assert_eq!(0b1, cpu.v[x]);
+    }
+
+    #[test]
+    fn opcode_8xy3_xor() {
+        let rom = Vec::new();
+        let mut mem = Memory::new(&rom);
+        let mut cpu = Cpu::new(&mut mem);
+
+        let x = 0xA;
+        let y = 0xB;
+
+        cpu.v[x] = 0b1;
+        cpu.v[y] = 0b0;
+        cpu.execute(0x8AB3);
+        assert_eq!(0b1, cpu.v[x]);
+
+        cpu.v[x] = 0b0;
+        cpu.v[y] = 0b1;
+        cpu.execute(0x8AB3);
+        assert_eq!(0b1, cpu.v[x]);
+
+        cpu.v[x] = 0b0;
+        cpu.v[y] = 0b0;
+        cpu.execute(0x8AB3);
+        assert_eq!(0b0, cpu.v[x]);
+
+        cpu.v[x] = 0b1;
+        cpu.v[y] = 0b1;
+        cpu.execute(0x8AB3);
+        assert_eq!(0b0, cpu.v[x]);
+    }
+
+    #[test]
+    fn opcode_8xy4_add_with_carry() {
+        let rom = Vec::new();
+        let mut mem = Memory::new(&rom);
+        let mut cpu = Cpu::new(&mut mem);
+
+        let x = 0xA;
+        let y = 0xB;
+
+        cpu.v[x] = 0x1;
+        cpu.v[y] = 0xFE;
+        cpu.execute(0x8AB4);
+        assert_eq!(0xFF, cpu.v[x]);
+        assert_eq!(0b0, cpu.v[0xF]);
+
+        cpu.v[x] = 0x1;
+        cpu.v[y] = 0xFF;
+        cpu.execute(0x8AB4);
+        assert_eq!(0x0, cpu.v[x]);
+        assert_eq!(0b1, cpu.v[0xF]);
+    }
+
+    #[test]
+    fn opcode_8xy5_subtract_without_borrow() {
+        let rom = Vec::new();
+        let mut mem = Memory::new(&rom);
+        let mut cpu = Cpu::new(&mut mem);
+
+        let x = 0xA;
+        let y = 0xB;
+
+        cpu.v[x] = 0x0;
+        cpu.v[y] = 0xFF;
+        cpu.execute(0x8AB5);
+        assert_eq!(0x1, cpu.v[x]);
+        assert_eq!(0b0, cpu.v[0xF]);
+
+        cpu.v[x] = 0x1;
+        cpu.v[y] = 0x1;
+        cpu.execute(0x8AB5);
+        assert_eq!(0x0, cpu.v[x]);
+        assert_eq!(0b1, cpu.v[0xF]);
+    }
+
+    #[test]
+    fn opcode_8xy6_shift_right() {
+        let rom = Vec::new();
+        let mut mem = Memory::new(&rom);
+        let mut cpu = Cpu::new(&mut mem);
+
+        let x = 0xA;
+
+        cpu.v[x] = 0b11;
+        cpu.execute(0x8A06);
+        assert_eq!(0b1, cpu.v[x]);
+        assert_eq!(0b1, cpu.v[0xF]);
+
+        cpu.v[x] = 0b10;
+        cpu.execute(0x8A06);
+        assert_eq!(0b1, cpu.v[x]);
+        assert_eq!(0b0, cpu.v[0xF]);
+    }
+
+    #[test]
+    fn opcode_8xy7_subtract_neg_without_borrow() {
+        let rom = Vec::new();
+        let mut mem = Memory::new(&rom);
+        let mut cpu = Cpu::new(&mut mem);
+
+        let x = 0xA;
+        let y = 0xB;
+
+        cpu.v[x] = 0xFF;
+        cpu.v[y] = 0x0;
+        cpu.execute(0x8AB7);
+        assert_eq!(0x1, cpu.v[x]);
+        assert_eq!(0b0, cpu.v[0xF]);
+
+        cpu.v[x] = 0x1;
+        cpu.v[y] = 0x1;
+        cpu.execute(0x8AB7);
+        assert_eq!(0x0, cpu.v[x]);
+        assert_eq!(0b1, cpu.v[0xF]);
+    }
+
+    #[test]
+    fn opcode_8xye_shift_left() {
+        let rom = Vec::new();
+        let mut mem = Memory::new(&rom);
+        let mut cpu = Cpu::new(&mut mem);
+
+        let x = 0xA;
+
+        cpu.v[x] = 0b11;
+        cpu.execute(0x8A0E);
+        assert_eq!(0b110, cpu.v[x]);
+        assert_eq!(0b0, cpu.v[0xF]);
+
+        cpu.v[x] = 0b10000001;
+        cpu.execute(0x8A0E);
+        assert_eq!(0b10, cpu.v[x]);
+        assert_eq!(0b1, cpu.v[0xF]);
     }
 }

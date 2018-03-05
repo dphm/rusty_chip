@@ -183,7 +183,7 @@ mod tests{
     fn stack_pop() {
         let r = Vec::new();
         let mut m = Memory::new(&r);
-        let sp: Address = STACK_RANGE.start;
+        let mut sp: Address = STACK_RANGE.start;
         m[sp] = 0xAB;
         m[sp + 1] = 0xCD;
 
