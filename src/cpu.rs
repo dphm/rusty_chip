@@ -140,7 +140,7 @@ impl<'a> Cpu<'a> {
             0xF000 => {
                 match kk {
                     0x07 => {
-                        let dt = self.dt.current();
+                        let dt = self.dt.current;
                         self.load(x, dt);
                     },
                     0x0A => (), // wait for key press, store value in Vx.
@@ -712,7 +712,7 @@ mod tests {
 
         cpu.v[0xA] = 0x66;
         cpu.execute(0xFA15);
-        assert_eq!(0x66, cpu.dt.current());
+        assert_eq!(0x66, cpu.dt.current);
     }
 
     #[test]
@@ -723,7 +723,7 @@ mod tests {
 
         cpu.v[0xA] = 0x66;
         cpu.execute(0xFA18);
-        assert_eq!(0x66, cpu.st.current());
+        assert_eq!(0x66, cpu.st.current);
     }
 
     #[test]
