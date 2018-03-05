@@ -102,8 +102,8 @@ pub const FONT_SET: [Byte; NUM_SPRITES * SPRITE_LEN] = [
     0b10000000
 ];
 
-pub fn sprite_addr(digit: Address) -> Address {
-    digit * SPRITE_LEN
+pub fn sprite_addr(digit: Byte) -> Address {
+    (digit as Address) * SPRITE_LEN
 }
 
 #[cfg(test)]
@@ -113,7 +113,7 @@ mod tests {
     #[test]
     fn sprite_addresses() {
         for i in 0..NUM_SPRITES {
-            assert_eq!(i * 5, sprite_addr(i));
+            assert_eq!(i * 5, sprite_addr(i as Byte));
         }
     }
 }
