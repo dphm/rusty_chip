@@ -4,7 +4,7 @@ const ROM_RANGE: Range<Address> = 0x200..0xEA0;
 const STACK_RANGE: Range<Address> = 0xEA0..0xF00;
 const DISPLAY_RANGE: Range<Address> = 0xF00..MAX_SIZE;
 
-use std::fmt::{Debug, Display, Formatter, Result};
+use std::fmt::{self, Debug, Display};
 use std::ops::{Index, IndexMut, Range};
 use io::font;
 
@@ -78,7 +78,7 @@ impl IndexMut<Address> for Memory {
 }
 
 impl Display for Memory {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let hex_bytes = self.mem.iter()
             .map(|byte| format!("{:02x}", &byte));
 
@@ -96,7 +96,7 @@ impl Display for Memory {
 }
 
 impl Debug for Memory {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
 }

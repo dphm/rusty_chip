@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Display, Formatter, Result};
+use std::fmt::{self, Debug, Display};
 
 type Address = usize;
 type Byte = u8;
@@ -44,13 +44,13 @@ impl Opcode {
 }
 
 impl Display for Opcode {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:04x}", self.code)
     }
 }
 
 impl Debug for Opcode {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Opcode {{ code: {:04x} }}", self.code)
     }
 }
