@@ -5,10 +5,10 @@ extern crate rand;
 use self::rand::Rng;
 use memory::Memory;
 use timer::Timer;
+use opcode::Opcode;
 use io::font;
 
 type Address = usize;
-type Opcode = u16;
 type Byte = u8;
 
 #[derive(Debug)]
@@ -39,7 +39,7 @@ impl<'a> Cpu<'a> {
 
     pub fn step(&mut self) {
         let opcode: Opcode = self.fetch();
-        self.execute(opcode);
+        self.execute(&opcode);
 
         self.dt.tick();
         self.st.tick();
@@ -52,55 +52,47 @@ impl<'a> Cpu<'a> {
     }
 
     fn fetch(&mut self) -> Opcode {
-        let op_a = self.current_val() as Opcode;
+        let a = self.current_val();
         self.advance_pc();
-        let op_b = self.current_val() as Opcode;
+        let b = self.current_val();
 
-        (op_a << 8) | op_b
+        Opcode::from_bytes((a, b))
     }
 
-    fn execute(&mut self, opcode: Opcode) {
-        let nnn = (opcode & 0x0FFF) as Address;
-        let x = ((opcode & 0x0F00) >> 8) as Address;
-        let y = ((opcode & 0x00F0) >> 4) as Address;
-        let kk = (opcode & 0x00FF) as Byte;
-        let k = (opcode & 0x000F) as Byte;
-
-        match opcode & 0xF000 {
-            0x0000 => {
-                match opcode & 0x00FF {
+    fn execute(&mut self, opcode: &Opcode) {
+        match opcode.first_hex_digit() {
+            0x0 => {
+                match opcode.kk() {
                     0xE0 => self.clear_display(),
                     0xEE => self.return_from_subroutine(),
                     _ => ()
                 }
             },
-            0x1000 => {
-                self.jump(nnn);
+            0x1 => self.jump(opcode.nnn()),
+            0x2 => self.call_subroutine(opcode.nnn()),
+            0x3 => {
+                let vx = self.v[opcode.x()];
+                self.skip_if_equal(vx, opcode.kk());
             },
-            0x2000 => {
-                self.call_subroutine(nnn);
+            0x4 => {
+                let vx = self.v[opcode.x()];
+                self.skip_if_not_equal(vx, opcode.kk());
             },
-            0x3000 => {
-                let vx = self.v[x];
-                self.skip_if_equal(vx, kk);
-            },
-            0x4000 => {
-                let vx = self.v[x];
-                self.skip_if_not_equal(vx, kk);
-            },
-            0x5000 => {
-                let vx = self.v[x];
-                let vy = self.v[y];
+            0x5 => {
+                let vx = self.v[opcode.x()];
+                let vy = self.v[opcode.y()];
                 self.skip_if_equal(vx, vy);
             },
-            0x6000 => {
-                self.load(x, kk);
+            0x6 => {
+                self.load(opcode.x(), opcode.kk());
             },
-            0x7000 => {
-                self.add(x, kk);
+            0x7 => {
+                self.add(opcode.x(), opcode.kk());
             },
-            0x8000 => {
-                match k {
+            0x8 => {
+                let x = opcode.x();
+                let y = opcode.y();
+                match opcode.k() {
                     0x1 => self.or(x, y),
                     0x2 => self.and(x, y),
                     0x3 => self.xor(x, y),
@@ -112,33 +104,34 @@ impl<'a> Cpu<'a> {
                     _ => ()
                 }
             },
-            0x9000 => {
-                let vx = self.v[x];
-                let vy = self.v[y];
+            0x9 => {
+                let vx = self.v[opcode.x()];
+                let vy = self.v[opcode.y()];
                 self.skip_if_not_equal(vx, vy);
             },
-            0xA000 => {
-                self.load_i(nnn);
+            0xA => {
+                self.load_i(opcode.nnn());
             },
-            0xB000 => {
+            0xB => {
                 let v0 = self.v[0];
-                self.jump(nnn + (v0 as Address));
+                self.jump(opcode.nnn() + (v0 as Address));
             },
-            0xC000 => {
-                self.random_and(x, kk);
+            0xC => {
+                self.random_and(opcode.x(), opcode.kk());
             },
-            0xD000 => {
-                self.draw_sprite(x, y, k as usize);
+            0xD => {
+                self.draw_sprite(opcode.x(), opcode.y(), opcode.k() as usize);
             },
-            0xE000 => {
-                match kk {
+            0xE => {
+                match opcode.kk() {
                     0x9E => (), // skip if key[v[x]] down
                     0xA1 => (), // skip if key[v[x]] up
                     _ => ()
                 }
             },
-            0xF000 => {
-                match kk {
+            0xF => {
+                let x = opcode.x();
+                match opcode.kk() {
                     0x07 => {
                         let dt = self.dt.current;
                         self.load(x, dt);
@@ -326,13 +319,14 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0x00E0);
 
         for i in Memory::DISPLAY_RANGE {
             cpu.memory[i] = 0xFF;
             assert_eq!(0xFF, cpu.memory[i]);
         }
 
-        cpu.execute(0x00E0);
+        cpu.execute(&opcode);
         for i in Memory::DISPLAY_RANGE {
             assert_eq!(0x0, cpu.memory[i]);
         }
@@ -343,12 +337,13 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0x00EE);
 
         cpu.memory[Memory::STACK_RANGE.start] = 0x03;
         cpu.memory[Memory::STACK_RANGE.start + 1] = 0x45;
         cpu.sp += 2;
 
-        cpu.execute(0x00EE);
+        cpu.execute(&opcode);
         assert_eq!(Memory::STACK_RANGE.start - 2, cpu.sp);
         assert_eq!(0x0345, cpu.pc);
     }
@@ -358,8 +353,9 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0x1234);
 
-        cpu.execute(0x1234);
+        cpu.execute(&opcode);
         assert_eq!(0x234, cpu.pc);
     }
 
@@ -368,9 +364,10 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
-        cpu.pc = 0x234;
+        let opcode = Opcode::new(0x2456);
 
-        cpu.execute(0x2456);
+        cpu.pc = 0x234;
+        cpu.execute(&opcode);
         assert_eq!(0x02, cpu.memory[Memory::STACK_RANGE.start]);
         assert_eq!(0x34, cpu.memory[Memory::STACK_RANGE.start + 1]);
         assert_eq!(Memory::STACK_RANGE.start, cpu.sp);
@@ -382,17 +379,18 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0x3ABC);
 
         let pc = cpu.pc;
         let x = 0xA;
         let kk = 0xBC;
 
         cpu.v[x] = kk + 1;
-        cpu.execute(0x3ABC);
+        cpu.execute(&opcode);
         assert_eq!(pc, cpu.pc);
 
         cpu.v[x] = kk;
-        cpu.execute(0x3ABC);
+        cpu.execute(&opcode);
         assert_eq!(pc + 2, cpu.pc);
     }
 
@@ -401,17 +399,18 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0x4ABC);
 
         let pc = cpu.pc;
         let x = 0xA;
         let kk = 0xBC;
 
         cpu.v[x] = kk;
-        cpu.execute(0x4ABC);
+        cpu.execute(&opcode);
         assert_eq!(pc, cpu.pc);
 
         cpu.v[x] = kk + 1;
-        cpu.execute(0x4ABC);
+        cpu.execute(&opcode);
         assert_eq!(pc + 2, cpu.pc);
     }
 
@@ -420,6 +419,7 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0x5AB0);
 
         let pc = cpu.pc;
         let x = 0xA;
@@ -427,11 +427,11 @@ mod tests {
         cpu.v[x] = 0xBC;
 
         cpu.v[y] = cpu.v[x] + 1;
-        cpu.execute(0x5AB0);
+        cpu.execute(&opcode);
         assert_eq!(pc, cpu.pc);
 
         cpu.v[y] = cpu.v[x];
-        cpu.execute(0x5AB0);
+        cpu.execute(&opcode);
         assert_eq!(pc + 2, cpu.pc);
     }
 
@@ -440,8 +440,9 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0x6ABC);
 
-        cpu.execute(0x6ABC);
+        cpu.execute(&opcode);
         assert_eq!(0xBC, cpu.v[0xA]);
     }
 
@@ -450,11 +451,12 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0x7AFF);
 
-        cpu.execute(0x7AFF);
+        cpu.execute(&opcode);
         assert_eq!(0xFF, cpu.v[0xA]);
 
-        cpu.execute(0x7AFF);
+        cpu.execute(&opcode);
         assert_eq!(0xFE, cpu.v[0xA]);
     }
 
@@ -463,28 +465,29 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0x8AB1);
 
         let x = 0xA;
         let y = 0xB;
 
         cpu.v[x] = 0b1;
         cpu.v[y] = 0b0;
-        cpu.execute(0x8AB1);
+        cpu.execute(&opcode);
         assert_eq!(0b1, cpu.v[x]);
 
         cpu.v[x] = 0b0;
         cpu.v[y] = 0b1;
-        cpu.execute(0x8AB1);
+        cpu.execute(&opcode);
         assert_eq!(0b1, cpu.v[x]);
 
         cpu.v[x] = 0b0;
         cpu.v[y] = 0b0;
-        cpu.execute(0x8AB1);
+        cpu.execute(&opcode);
         assert_eq!(0b0, cpu.v[x]);
 
         cpu.v[x] = 0b1;
         cpu.v[y] = 0b1;
-        cpu.execute(0x8AB1);
+        cpu.execute(&opcode);
         assert_eq!(0b1, cpu.v[x]);
     }
 
@@ -493,28 +496,29 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0x8AB2);
 
         let x = 0xA;
         let y = 0xB;
 
         cpu.v[x] = 0b1;
         cpu.v[y] = 0b0;
-        cpu.execute(0x8AB2);
+        cpu.execute(&opcode);
         assert_eq!(0b0, cpu.v[x]);
 
         cpu.v[x] = 0b0;
         cpu.v[y] = 0b1;
-        cpu.execute(0x8AB2);
+        cpu.execute(&opcode);
         assert_eq!(0b0, cpu.v[x]);
 
         cpu.v[x] = 0b0;
         cpu.v[y] = 0b0;
-        cpu.execute(0x8AB2);
+        cpu.execute(&opcode);
         assert_eq!(0b0, cpu.v[x]);
 
         cpu.v[x] = 0b1;
         cpu.v[y] = 0b1;
-        cpu.execute(0x8AB2);
+        cpu.execute(&opcode);
         assert_eq!(0b1, cpu.v[x]);
     }
 
@@ -523,28 +527,29 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0x8AB3);
 
         let x = 0xA;
         let y = 0xB;
 
         cpu.v[x] = 0b1;
         cpu.v[y] = 0b0;
-        cpu.execute(0x8AB3);
+        cpu.execute(&opcode);
         assert_eq!(0b1, cpu.v[x]);
 
         cpu.v[x] = 0b0;
         cpu.v[y] = 0b1;
-        cpu.execute(0x8AB3);
+        cpu.execute(&opcode);
         assert_eq!(0b1, cpu.v[x]);
 
         cpu.v[x] = 0b0;
         cpu.v[y] = 0b0;
-        cpu.execute(0x8AB3);
+        cpu.execute(&opcode);
         assert_eq!(0b0, cpu.v[x]);
 
         cpu.v[x] = 0b1;
         cpu.v[y] = 0b1;
-        cpu.execute(0x8AB3);
+        cpu.execute(&opcode);
         assert_eq!(0b0, cpu.v[x]);
     }
 
@@ -553,19 +558,20 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0x8AB4);
 
         let x = 0xA;
         let y = 0xB;
 
         cpu.v[x] = 0x1;
         cpu.v[y] = 0xFE;
-        cpu.execute(0x8AB4);
+        cpu.execute(&opcode);
         assert_eq!(0xFF, cpu.v[x]);
         assert_eq!(0b0, cpu.v[0xF]);
 
         cpu.v[x] = 0x1;
         cpu.v[y] = 0xFF;
-        cpu.execute(0x8AB4);
+        cpu.execute(&opcode);
         assert_eq!(0x0, cpu.v[x]);
         assert_eq!(0b1, cpu.v[0xF]);
     }
@@ -575,19 +581,20 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0x8AB5);
 
         let x = 0xA;
         let y = 0xB;
 
         cpu.v[x] = 0x0;
         cpu.v[y] = 0xFF;
-        cpu.execute(0x8AB5);
+        cpu.execute(&opcode);
         assert_eq!(0x1, cpu.v[x]);
         assert_eq!(0b0, cpu.v[0xF]);
 
         cpu.v[x] = 0x1;
         cpu.v[y] = 0x1;
-        cpu.execute(0x8AB5);
+        cpu.execute(&opcode);
         assert_eq!(0x0, cpu.v[x]);
         assert_eq!(0b1, cpu.v[0xF]);
     }
@@ -597,16 +604,17 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0x8A06);
 
         let x = 0xA;
 
         cpu.v[x] = 0b11;
-        cpu.execute(0x8A06);
+        cpu.execute(&opcode);
         assert_eq!(0b1, cpu.v[x]);
         assert_eq!(0b1, cpu.v[0xF]);
 
         cpu.v[x] = 0b10;
-        cpu.execute(0x8A06);
+        cpu.execute(&opcode);
         assert_eq!(0b1, cpu.v[x]);
         assert_eq!(0b0, cpu.v[0xF]);
     }
@@ -616,19 +624,20 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0x8AB7);
 
         let x = 0xA;
         let y = 0xB;
 
         cpu.v[x] = 0xFF;
         cpu.v[y] = 0x0;
-        cpu.execute(0x8AB7);
+        cpu.execute(&opcode);
         assert_eq!(0x1, cpu.v[x]);
         assert_eq!(0b0, cpu.v[0xF]);
 
         cpu.v[x] = 0x1;
         cpu.v[y] = 0x1;
-        cpu.execute(0x8AB7);
+        cpu.execute(&opcode);
         assert_eq!(0x0, cpu.v[x]);
         assert_eq!(0b1, cpu.v[0xF]);
     }
@@ -638,16 +647,17 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0x8A0E);
 
         let x = 0xA;
 
         cpu.v[x] = 0b11;
-        cpu.execute(0x8A0E);
+        cpu.execute(&opcode);
         assert_eq!(0b110, cpu.v[x]);
         assert_eq!(0b0, cpu.v[0xF]);
 
         cpu.v[x] = 0b10000001;
-        cpu.execute(0x8A0E);
+        cpu.execute(&opcode);
         assert_eq!(0b10, cpu.v[x]);
         assert_eq!(0b1, cpu.v[0xF]);
     }
@@ -657,6 +667,7 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0x9AB0);
 
         let pc = cpu.pc;
         let x = 0xA;
@@ -664,11 +675,11 @@ mod tests {
 
         cpu.v[x] = 0xBC;
         cpu.v[y] = cpu.v[x];
-        cpu.execute(0x9AB0);
+        cpu.execute(&opcode);
         assert_eq!(pc, cpu.pc);
 
         cpu.v[y] = cpu.v[x] + 1;
-        cpu.execute(0x9AB0);
+        cpu.execute(&opcode);
         assert_eq!(pc + 2, cpu.pc);
     }
 
@@ -677,8 +688,9 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0xABCD);
 
-        cpu.execute(0xABCD);
+        cpu.execute(&opcode);
         assert_eq!(0xBCD, cpu.i);
     }
 
@@ -687,9 +699,10 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0xBBCD);
 
         cpu.v[0] = 0x2;
-        cpu.execute(0xBBCD);
+        cpu.execute(&opcode);
         assert_eq!(0xBCF, cpu.pc);
     }
 
@@ -698,9 +711,10 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0xFA07);
 
         cpu.dt.set(0x42);
-        cpu.execute(0xFA07);
+        cpu.execute(&opcode);
         assert_eq!(0x42, cpu.v[0xA]);
     }
 
@@ -709,9 +723,10 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0xFA15);
 
         cpu.v[0xA] = 0x66;
-        cpu.execute(0xFA15);
+        cpu.execute(&opcode);
         assert_eq!(0x66, cpu.dt.current);
     }
 
@@ -720,9 +735,10 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0xFA18);
 
         cpu.v[0xA] = 0x66;
-        cpu.execute(0xFA18);
+        cpu.execute(&opcode);
         assert_eq!(0x66, cpu.st.current);
     }
 
@@ -731,10 +747,11 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0xFA1E);
 
         cpu.i = 0xC00;
         cpu.v[0xA] = 0x2;
-        cpu.execute(0xFA1E);
+        cpu.execute(&opcode);
         assert_eq!(0xC02, cpu.i);
     }
 
@@ -743,10 +760,11 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0xFA29);
 
         for sprite in 0..0xF {
             cpu.v[0xA] = sprite;
-            cpu.execute(0xFA29);
+            cpu.execute(&opcode);
             assert_eq!(font::sprite_addr(sprite), cpu.i);
         }
     }
@@ -756,9 +774,10 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0xFA33);
 
         cpu.v[0xA] = 0xFE;
-        cpu.execute(0xFA33);
+        cpu.execute(&opcode);
         assert_eq!(0x2, cpu.memory[cpu.i]);
         assert_eq!(0x5, cpu.memory[cpu.i + 1]);
         assert_eq!(0x4, cpu.memory[cpu.i + 2]);
@@ -769,12 +788,13 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0xF355);
 
         cpu.v[0x0] = 0x10;
         cpu.v[0x1] = 0x11;
         cpu.v[0x2] = 0x12;
         cpu.v[0x3] = 0x13;
-        cpu.execute(0xF355);
+        cpu.execute(&opcode);
         assert_eq!(0x10, cpu.memory[cpu.i]);
         assert_eq!(0x11, cpu.memory[cpu.i + 1]);
         assert_eq!(0x12, cpu.memory[cpu.i + 2]);
@@ -786,12 +806,13 @@ mod tests {
         let rom = Vec::new();
         let mut mem = Memory::new(&rom);
         let mut cpu = Cpu::new(&mut mem);
+        let opcode = Opcode::new(0xF365);
 
         cpu.memory[cpu.i] = 0xFF;
         cpu.memory[cpu.i + 1] = 0xFE;
         cpu.memory[cpu.i + 2] = 0xFD;
         cpu.memory[cpu.i + 3] = 0xFC;
-        cpu.execute(0xF365);
+        cpu.execute(&opcode);
         assert_eq!(0xFF, cpu.v[0x0]);
         assert_eq!(0xFE, cpu.v[0x1]);
         assert_eq!(0xFD, cpu.v[0x2]);

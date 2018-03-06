@@ -2,6 +2,7 @@
 
 mod cpu;
 mod memory;
+mod opcode;
 mod timer;
 mod io;
 
