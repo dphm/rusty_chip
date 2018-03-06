@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Display, Formatter, Result};
+
 type Address = usize;
 type Byte = u8;
 
@@ -38,6 +40,18 @@ impl Opcode {
 
     pub fn k(&self) -> Byte {
         (self.code & 0xF) as Byte
+    }
+}
+
+impl Display for Opcode {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(f, "{:04x}", self.code)
+    }
+}
+
+impl Debug for Opcode {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(f, "Opcode {{ code: {:04x} }}", self.code)
     }
 }
 
@@ -123,5 +137,5 @@ mod tests {
         let code = 0xABCD;
         let opcode = Opcode::new(code);
         assert_eq!(0xD as Byte, opcode.k());
-    }    
+    }
 }
