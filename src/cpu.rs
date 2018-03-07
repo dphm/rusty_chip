@@ -182,6 +182,14 @@ impl<'a> Cpu<'a> {
         self.pc += 1;
     }
 
+    fn advance_sp(&mut self) {
+        self.sp += 2;
+    }
+
+    fn retract_sp(&mut self) {
+        self.sp -= 2;
+    }
+
     fn set_flag(&mut self, val: Byte) {
         self.v[0xF] = val;
     }
@@ -197,6 +205,7 @@ impl<'a> Cpu<'a> {
     }
 
     fn stack_push(&mut self, addr: Address) {
+        if self.sp + 1 >= STACK_RANGE.end { panic!("Stack overflow"); }
         self.memory[self.sp] = ((addr & 0xFF00) >> 8) as Byte;
         self.memory[self.sp + 1] = (addr & 0x00FF) as Byte;
     }
@@ -204,7 +213,7 @@ impl<'a> Cpu<'a> {
     fn return_from_subroutine(&mut self) {
         if self.sp < STACK_RANGE.start { return; }
         self.pc = self.stack_pop();
-        self.sp -= 2;
+        self.retract_sp();
     }
 
     fn jump(&mut self, addr: Address) {
@@ -212,10 +221,8 @@ impl<'a> Cpu<'a> {
     }
 
     fn call_subroutine(&mut self, addr: Address) {
-        if self.sp + 2 >= STACK_RANGE.end { return; }
-
         let current = self.pc;
-        self.sp += 2;
+        self.advance_sp();
         self.stack_push(current);
         self.pc = addr;
     }
