@@ -1,10 +1,8 @@
-#[allow(dead_code)]
-
 mod cpu;
 mod memory;
 mod opcode;
 mod timer;
-mod io;
+mod output;
 
 use std::io::{Error, Read};
 use std::fs::File;

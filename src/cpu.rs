@@ -6,7 +6,7 @@ use self::rand::Rng;
 use memory::Memory;
 use timer::Timer;
 use opcode::Opcode;
-use io::font;
+use output::font;
 
 type Address = usize;
 type Byte = u8;

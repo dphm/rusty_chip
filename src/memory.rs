@@ -6,7 +6,7 @@ const DISPLAY_RANGE: Range<Address> = 0xF00..MAX_SIZE;
 
 use std::fmt::{self, Debug, Display};
 use std::ops::{Index, IndexMut, Range};
-use io::font;
+use output::font;
 
 type Address = usize;
 type Byte = u8;
