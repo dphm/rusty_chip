@@ -81,16 +81,16 @@ impl<'a> Cpu<'a> {
             0x2 => self.call_subroutine(opcode.nnn()),
             0x3 => {
                 let vx = self.v[opcode.x()];
-                self.skip_if_equal(vx, opcode.kk());
+                self.skip_if(vx == opcode.kk());
             },
             0x4 => {
                 let vx = self.v[opcode.x()];
-                self.skip_if_not_equal(vx, opcode.kk());
+                self.skip_if(vx != opcode.kk());
             },
             0x5 => {
                 let vx = self.v[opcode.x()];
                 let vy = self.v[opcode.y()];
-                self.skip_if_equal(vx, vy);
+                self.skip_if(vx == vy);
             },
             0x6 => {
                 self.load(opcode.x(), opcode.kk());
@@ -116,7 +116,7 @@ impl<'a> Cpu<'a> {
             0x9 => {
                 let vx = self.v[opcode.x()];
                 let vy = self.v[opcode.y()];
-                self.skip_if_not_equal(vx, vy);
+                self.skip_if(vx != vy);
             },
             0xA => {
                 self.load_i(opcode.nnn());
@@ -227,12 +227,12 @@ impl<'a> Cpu<'a> {
         self.pc = addr;
     }
 
-    fn skip_if_equal(&mut self, a: Byte, b: Byte) {
-        if a == b { self.pc += 2; }
+    fn skip_next_instruction(&mut self) {
+        self.pc += 2;
     }
 
-    fn skip_if_not_equal(&mut self, a: Byte, b: Byte) {
-        if a != b { self.pc += 2; }
+    fn skip_if(&mut self, p: bool) {
+        if p { self.skip_next_instruction(); }
     }
 
     fn load_i(&mut self, addr: Address) {
