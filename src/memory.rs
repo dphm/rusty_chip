@@ -44,6 +44,14 @@ impl IndexMut<Address> for Memory {
     }
 }
 
+impl Index<Range<Address>> for Memory {
+    type Output = [Byte];
+
+    fn index(&self, range: Range<Address>) -> &Self::Output {
+        &self.mem[range]
+    }
+}
+
 impl Debug for Memory {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let hex_bytes = self.mem.iter()
