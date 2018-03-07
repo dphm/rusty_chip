@@ -13,8 +13,8 @@ use memory::Memory;
 
 fn main() {
     let rom = read_bytes("rom/logo.ch8").expect("Unable to load ROM");
-    let mut memory = Memory::new(&rom);
-    let mut cpu = Cpu::new(&mut memory);
+    let mut memory = Memory::new();
+    let mut cpu = Cpu::new(&mut memory, &rom);
 
     loop {
         if cpu.exit { break; }

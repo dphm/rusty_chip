@@ -1,8 +1,15 @@
 const NUM_REGISTERS: usize = 16;
 
+const FONT_RANGE: Range<Address> = 0x0..0x200;
+const ROM_RANGE: Range<Address> = 0x200..0xEA0;
+const STACK_RANGE: Range<Address> = 0xEA0..0xF00;
+const DISPLAY_RANGE: Range<Address> = 0xF00..Memory::MAX_SIZE;
+
 extern crate rand;
 
 use self::rand::Rng;
+use std::ops::Range;
+
 use memory::Memory;
 use timer::Timer;
 use opcode::Opcode;
@@ -24,16 +31,18 @@ pub struct Cpu<'a> {
 }
 
 impl<'a> Cpu<'a> {
-    pub fn new(memory: &'a mut Memory) -> Cpu<'a> {
+    pub fn new(memory: &'a mut Memory, rom: &Vec<Byte>) -> Cpu<'a> {
         Cpu {
             exit: false,
-            pc: Memory::ROM_RANGE.start,
-            sp: Memory::STACK_RANGE.start - 2,
+            pc: ROM_RANGE.start,
+            sp: STACK_RANGE.start - 2,
             i: 0x0,
             dt: Timer::new(60),
             st: Timer::new(60),
             v: [0x0; NUM_REGISTERS],
-            memory
+            memory: memory
+                .load(&font::FONT_SET, &FONT_RANGE)
+                .load(&rom, &ROM_RANGE)
         }
     }
 
@@ -44,7 +53,7 @@ impl<'a> Cpu<'a> {
         self.dt.tick();
         self.st.tick();
 
-        if self.pc + 1 >= Memory::ROM_RANGE.end {
+        if self.pc + 1 >= ROM_RANGE.end {
             self.exit = true;
             println!("{:?}", self);
             return;
@@ -178,13 +187,23 @@ impl<'a> Cpu<'a> {
     }
 
     fn clear_display(&mut self) {
-        self.memory.clear(&Memory::DISPLAY_RANGE)
+        for i in DISPLAY_RANGE {
+            self.memory[i] = 0x0;
+        }
+    }
+
+    fn stack_pop(&mut self) -> Address {
+        (self.memory[self.sp] as Address) << 8 | (self.memory[self.sp + 1] as Address)
+    }
+
+    fn stack_push(&mut self, addr: Address) {
+        self.memory[self.sp] = ((addr & 0xFF00) >> 8) as Byte;
+        self.memory[self.sp + 1] = (addr & 0x00FF) as Byte;
     }
 
     fn return_from_subroutine(&mut self) {
-        if self.sp < Memory::STACK_RANGE.start { return; }
-
-        self.pc = self.memory.stack_pop(&self.sp);
+        if self.sp < STACK_RANGE.start { return; }
+        self.pc = self.stack_pop();
         self.sp -= 2;
     }
 
@@ -193,10 +212,11 @@ impl<'a> Cpu<'a> {
     }
 
     fn call_subroutine(&mut self, addr: Address) {
-        if self.sp + 2 >= Memory::STACK_RANGE.end { return; }
+        if self.sp + 2 >= STACK_RANGE.end { return; }
 
+        let current = self.pc;
         self.sp += 2;
-        self.memory.stack_push(&self.sp, &self.pc);
+        self.stack_push(current);
         self.pc = addr;
     }
 
@@ -317,17 +337,17 @@ mod tests {
     #[test]
     fn opcode_00e0_clear_display() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x00E0);
 
-        for i in Memory::DISPLAY_RANGE {
+        for i in DISPLAY_RANGE {
             cpu.memory[i] = 0xFF;
             assert_eq!(0xFF, cpu.memory[i]);
         }
 
         cpu.execute(&opcode);
-        for i in Memory::DISPLAY_RANGE {
+        for i in DISPLAY_RANGE {
             assert_eq!(0x0, cpu.memory[i]);
         }
     }
@@ -335,24 +355,24 @@ mod tests {
     #[test]
     fn opcode_00ee_return_from_subroutine() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x00EE);
 
-        cpu.memory[Memory::STACK_RANGE.start] = 0x03;
-        cpu.memory[Memory::STACK_RANGE.start + 1] = 0x45;
+        cpu.memory[STACK_RANGE.start] = 0x03;
+        cpu.memory[STACK_RANGE.start + 1] = 0x45;
         cpu.sp += 2;
 
         cpu.execute(&opcode);
-        assert_eq!(Memory::STACK_RANGE.start - 2, cpu.sp);
+        assert_eq!(STACK_RANGE.start - 2, cpu.sp);
         assert_eq!(0x0345, cpu.pc);
     }
 
     #[test]
     fn opcode_1nnn_jump() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x1234);
 
         cpu.execute(&opcode);
@@ -362,23 +382,23 @@ mod tests {
     #[test]
     fn opcode_2nnn_call_subroutine() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x2456);
 
         cpu.pc = 0x234;
         cpu.execute(&opcode);
-        assert_eq!(0x02, cpu.memory[Memory::STACK_RANGE.start]);
-        assert_eq!(0x34, cpu.memory[Memory::STACK_RANGE.start + 1]);
-        assert_eq!(Memory::STACK_RANGE.start, cpu.sp);
+        assert_eq!(0x02, cpu.memory[STACK_RANGE.start]);
+        assert_eq!(0x34, cpu.memory[STACK_RANGE.start + 1]);
+        assert_eq!(STACK_RANGE.start, cpu.sp);
         assert_eq!(0x456, cpu.pc);
     }
 
     #[test]
     fn opcode_3xkk_skip_if_equal() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x3ABC);
 
         let pc = cpu.pc;
@@ -397,8 +417,8 @@ mod tests {
     #[test]
     fn opcode_4xkk_skip_if_not_equal() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x4ABC);
 
         let pc = cpu.pc;
@@ -417,8 +437,8 @@ mod tests {
     #[test]
     fn opcode_5xy0_skip_if_equal() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x5AB0);
 
         let pc = cpu.pc;
@@ -438,8 +458,8 @@ mod tests {
     #[test]
     fn opcode_6xkk_load() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x6ABC);
 
         cpu.execute(&opcode);
@@ -449,8 +469,8 @@ mod tests {
     #[test]
     fn opcode_7xkk_add() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x7AFF);
 
         cpu.execute(&opcode);
@@ -463,8 +483,8 @@ mod tests {
     #[test]
     fn opcode_8xy1_or() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x8AB1);
 
         let x = 0xA;
@@ -494,8 +514,8 @@ mod tests {
     #[test]
     fn opcode_8xy2_and() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x8AB2);
 
         let x = 0xA;
@@ -525,8 +545,8 @@ mod tests {
     #[test]
     fn opcode_8xy3_xor() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x8AB3);
 
         let x = 0xA;
@@ -556,8 +576,8 @@ mod tests {
     #[test]
     fn opcode_8xy4_add_with_carry() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x8AB4);
 
         let x = 0xA;
@@ -579,8 +599,8 @@ mod tests {
     #[test]
     fn opcode_8xy5_subtract_without_borrow() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x8AB5);
 
         let x = 0xA;
@@ -602,8 +622,8 @@ mod tests {
     #[test]
     fn opcode_8xy6_shift_right() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x8A06);
 
         let x = 0xA;
@@ -622,8 +642,8 @@ mod tests {
     #[test]
     fn opcode_8xy7_subtract_neg_without_borrow() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x8AB7);
 
         let x = 0xA;
@@ -645,8 +665,8 @@ mod tests {
     #[test]
     fn opcode_8xye_shift_left() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x8A0E);
 
         let x = 0xA;
@@ -665,8 +685,8 @@ mod tests {
     #[test]
     fn opcode_9xy0_skip_if_not_equal() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0x9AB0);
 
         let pc = cpu.pc;
@@ -686,8 +706,8 @@ mod tests {
     #[test]
     fn opcode_annn_load_i() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0xABCD);
 
         cpu.execute(&opcode);
@@ -697,8 +717,8 @@ mod tests {
     #[test]
     fn opcode_bnnn_jump_plus_v0() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0xBBCD);
 
         cpu.v[0] = 0x2;
@@ -709,8 +729,8 @@ mod tests {
     #[test]
     fn opcode_fx07_set_vx_dt() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0xFA07);
 
         cpu.dt.set(0x42);
@@ -721,8 +741,8 @@ mod tests {
     #[test]
     fn opcode_fx15_set_dt_vx() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0xFA15);
 
         cpu.v[0xA] = 0x66;
@@ -733,8 +753,8 @@ mod tests {
     #[test]
     fn opcode_fx18_set_st_vx() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0xFA18);
 
         cpu.v[0xA] = 0x66;
@@ -745,8 +765,8 @@ mod tests {
     #[test]
     fn opcode_fx1e_set_i_plus_vx() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0xFA1E);
 
         cpu.i = 0xC00;
@@ -758,8 +778,8 @@ mod tests {
     #[test]
     fn opcode_fx29_set_i_sprite_loc_vx() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0xFA29);
 
         for sprite in 0..0xF {
@@ -772,8 +792,8 @@ mod tests {
     #[test]
     fn opcode_fx33_store_bcd() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0xFA33);
 
         cpu.v[0xA] = 0xFE;
@@ -786,8 +806,8 @@ mod tests {
     #[test]
     fn opcode_fx55_store_registers_through() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0xF355);
 
         cpu.v[0x0] = 0x10;
@@ -804,8 +824,8 @@ mod tests {
     #[test]
     fn opcode_fx65_read_registers_through() {
         let rom = Vec::new();
-        let mut mem = Memory::new(&rom);
-        let mut cpu = Cpu::new(&mut mem);
+        let mut mem = Memory::new();
+        let mut cpu = Cpu::new(&mut mem, &rom);
         let opcode = Opcode::new(0xF365);
 
         cpu.memory[cpu.i] = 0xFF;

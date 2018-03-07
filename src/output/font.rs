@@ -1,9 +1,10 @@
 type Address = usize;
 type Byte = u8;
 
-pub const NUM_SPRITES: usize = 16;
-pub const SPRITE_WIDTH: usize = 8;
-pub const SPRITE_HEIGHT: usize = 5;
+const NUM_SPRITES: usize = 16;
+const SPRITE_WIDTH: usize = 8;
+const SPRITE_HEIGHT: usize = 5;
+
 pub const FONT_SET: [Byte; NUM_SPRITES * SPRITE_HEIGHT] = [
     // 0
     0b11110000,
