@@ -74,7 +74,7 @@ impl<'a> Cpu<'a> {
                 match opcode.kk() {
                     0xE0 => self.clear_display(),
                     0xEE => self.return_from_subroutine(),
-                    _ => ()
+                    _ => self.unknown_opcode(&opcode)
                 }
             },
             0x1 => self.jump(opcode.nnn()),
@@ -110,7 +110,7 @@ impl<'a> Cpu<'a> {
                     0x6 => self.shift_right(x),
                     0x7 => self.subtract_neg_without_borrow(x, y),
                     0xE => self.shift_left(x),
-                    _ => ()
+                    _ => self.unknown_opcode(&opcode)
                 }
             },
             0x9 => {
@@ -135,7 +135,7 @@ impl<'a> Cpu<'a> {
                 match opcode.kk() {
                     0x9E => (), // skip if key[v[x]] down
                     0xA1 => (), // skip if key[v[x]] up
-                    _ => ()
+                    _ => self.unknown_opcode(&opcode)
                 }
             },
             0xF => {
@@ -167,11 +167,15 @@ impl<'a> Cpu<'a> {
                     0x33 => self.store_bcd(x),
                     0x55 => self.store_registers_through(x),
                     0x65 => self.read_registers_through(x),
-                    _ => ()
+                    _ => self.unknown_opcode(&opcode)
                 }
             },
-            _ => ()
+            _ => self.unknown_opcode(&opcode)
         }
+    }
+
+    fn unknown_opcode(&self, opcode: &Opcode) {
+        panic!("Unknown opcode {:?}", opcode)
     }
 
     fn current_val(&self) -> Byte {
