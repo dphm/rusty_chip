@@ -322,7 +322,15 @@ impl<'a> Cpu<'a> {
     }
 
     fn draw_sprite(&mut self, x: Register, y: Register, n: usize) {
-        // Draw n-byte sprite with memory starting at I at (x, y)
-        // Set flag if collision
+        let sprite_bytes = &self.memory[self.i..self.i + n];
+        let sprite_bits = sprite_bytes.iter().map(|byte| Cpu::bits(*byte));
+        // Do something with bits
+    }
+
+    fn bits(byte: Byte) -> Vec<bool> {
+        let binary = format!("{:08b}", byte);
+        binary.chars()
+            .map(|c| c == '1')
+            .collect()
     }
 }
