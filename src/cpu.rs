@@ -14,7 +14,7 @@ use memory::Memory;
 use timer::Timer;
 use pointer::Pointer;
 use opcode::Opcode;
-use output::font;
+use output::{font, graphics};
 
 type Address = usize;
 type Register = usize;
@@ -322,15 +322,25 @@ impl<'a> Cpu<'a> {
     }
 
     fn draw_sprite(&mut self, x: Register, y: Register, n: usize) {
-        let sprite_bytes = &self.memory[self.i..self.i + n];
-        let sprite_bits = sprite_bytes.iter().map(|byte| Cpu::bits(*byte));
-        // Do something with bits
-    }
+        let vx = self.v[x];
+        let vy = self.v[y];
+        let i = self.i.current;
+        let sprite_bytes = self.memory[i..i + n].to_vec();
 
-    fn bits(byte: Byte) -> Vec<bool> {
-        let binary = format!("{:08b}", byte);
-        binary.chars()
-            .map(|c| c == '1')
-            .collect()
+        let row = vy as Address;
+        let col = vx as Address / graphics::SPRITE_WIDTH;
+
+        for row in 0..n {
+            let mem_addr = row * 8 + col;
+            let mem_byte = self.memory[mem_addr];
+            let sprite_byte = sprite_bytes[row];
+            self.memory[mem_addr] = mem_byte ^ sprite_byte;
+
+            if mem_byte & sprite_byte == 0x0 {
+                self.set_flag(0b0);
+            } else {
+                self.set_flag(0b1);
+            }
+        }
     }
 }

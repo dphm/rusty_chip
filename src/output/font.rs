@@ -1,11 +1,10 @@
 type Address = usize;
 type Byte = u8;
 
-use super::graphics;
-
 const NUM_SPRITES: usize = 16;
+const SPRITE_HEIGHT: usize = 5;
 
-pub const FONT_SET: [Byte; NUM_SPRITES * graphics::SPRITE_HEIGHT] = [
+pub const FONT_SET: [Byte; NUM_SPRITES * SPRITE_HEIGHT] = [
     // 0
     0b11110000,
     0b10010000,
@@ -105,7 +104,7 @@ pub const FONT_SET: [Byte; NUM_SPRITES * graphics::SPRITE_HEIGHT] = [
 ];
 
 pub fn sprite_addr(digit: Byte) -> Address {
-    (digit as Address) * graphics::SPRITE_HEIGHT
+    (digit as Address) * SPRITE_HEIGHT
 }
 
 #[cfg(test)]
