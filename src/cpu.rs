@@ -48,15 +48,14 @@ impl<'a> Cpu<'a> {
 
     pub fn step(&mut self) {
         let opcode = self.fetch_opcode();
-        self.advance_pc();
         self.execute(&opcode);
+        self.advance_pc();
 
         self.dt.tick();
         self.st.tick();
 
         if self.pc + 1 >= ROM_RANGE.end {
             self.exit = true;
-            println!("{:?}", self);
             return;
         }
     }
