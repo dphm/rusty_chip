@@ -1,7 +1,10 @@
+#![feature(range_contains)]
+
 mod cpu;
 mod memory;
 mod opcode;
 mod timer;
+mod pointer;
 mod output;
 
 use std::io::{Error, Read};

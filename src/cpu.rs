@@ -12,6 +12,7 @@ use std::ops::Range;
 
 use memory::Memory;
 use timer::Timer;
+use pointer::Pointer;
 use opcode::Opcode;
 use output::font;
 
@@ -21,9 +22,9 @@ type Byte = u8;
 #[derive(Debug)]
 pub struct Cpu<'a> {
     pub exit: bool,
-    pc: Address,
-    sp: Address,
-    i: Address,
+    pc: Pointer,
+    sp: Pointer,
+    i: Pointer,
     dt: Timer,
     st: Timer,
     v: [Byte; NUM_REGISTERS],
@@ -34,9 +35,9 @@ impl<'a> Cpu<'a> {
     pub fn new(memory: &'a mut Memory, rom: &Vec<Byte>) -> Cpu<'a> {
         Cpu {
             exit: false,
-            pc: ROM_RANGE.start,
-            sp: STACK_RANGE.start - 2,
-            i: 0x0,
+            pc: Pointer::new(ROM_RANGE),
+            sp: Pointer::new(STACK_RANGE),
+            i: Pointer::new(ROM_RANGE),
             dt: Timer::new(60),
             st: Timer::new(60),
             v: [0x0; NUM_REGISTERS],
@@ -49,16 +50,15 @@ impl<'a> Cpu<'a> {
     pub fn step(&mut self) {
         let opcode = self.fetch_opcode();
         self.execute(&opcode);
-        self.advance_pc();
+        self.pc.move_forward();
 
         self.dt.tick();
         self.st.tick();
-
-        self.exit = (self.pc >= ROM_RANGE.end) | (self.i >= ROM_RANGE.end);
     }
 
     fn fetch_opcode(&mut self) -> Opcode {
-        let bytes = (self.memory[self.pc], self.memory[self.pc + 1]);
+        let current = self.pc.current;
+        let bytes = (self.memory[current], self.memory[current + 1]);
         Opcode::from_bytes(bytes)
     }
 
@@ -113,7 +113,7 @@ impl<'a> Cpu<'a> {
                 self.skip_if(vx != vy);
             },
             0xA => {
-                self.load_i(opcode.nnn());
+                self.i.set(opcode.nnn());
             },
             0xB => {
                 let v0 = self.v[0];
@@ -150,14 +150,14 @@ impl<'a> Cpu<'a> {
                     },
                     0x1E => {
                         let vx = self.v[x];
-                        let addr = self.i.wrapping_add(vx as Address);
-                        self.load_i(addr);
+                        let addr = self.i.current.wrapping_add(vx as Address);
+                        self.i.set(addr);
 
                     },
                     0x29 => {
                         let vx = self.v[x];
                         let addr = font::sprite_addr(vx);
-                        self.load_i(addr);
+                        self.i.set(addr);
                     },
                     0x33 => self.store_bcd(x),
                     0x55 => self.store_registers_through(x),
@@ -173,22 +173,6 @@ impl<'a> Cpu<'a> {
         panic!("Unknown opcode {:?}", opcode)
     }
 
-    fn current_val(&self) -> Byte {
-        self.memory[self.pc]
-    }
-
-    fn advance_pc(&mut self) {
-        self.pc += 2;
-    }
-
-    fn advance_sp(&mut self) {
-        self.sp += 2;
-    }
-
-    fn retract_sp(&mut self) {
-        self.sp -= 2;
-    }
-
     fn set_flag(&mut self, val: Byte) {
         self.v[0xF] = val;
     }
@@ -200,38 +184,36 @@ impl<'a> Cpu<'a> {
     }
 
     fn stack_pop(&mut self) -> Address {
-        (self.memory[self.sp] as Address) << 8 | (self.memory[self.sp + 1] as Address)
+        let current = self.sp.current;
+        let addr = (self.memory[current] as Address) << 8 | (self.memory[current + 1] as Address);
+        self.sp.move_backward();
+        addr
     }
 
     fn stack_push(&mut self, addr: Address) {
-        if self.sp + 1 >= STACK_RANGE.end { panic!("Stack overflow"); }
-        self.memory[self.sp] = ((addr & 0xFF00) >> 8) as Byte;
-        self.memory[self.sp + 1] = (addr & 0x00FF) as Byte;
+        self.sp.move_forward();
+        let current = self.sp.current;
+        self.memory[current] = ((addr & 0xFF00) >> 8) as Byte;
+        self.memory[current + 1] = (addr & 0x00FF) as Byte;
     }
 
     fn return_from_subroutine(&mut self) {
-        if self.sp < STACK_RANGE.start { return; }
-        self.pc = self.stack_pop();
-        self.retract_sp();
+        let addr = self.stack_pop();
+        self.pc.set(addr);
     }
 
     fn jump(&mut self, addr: Address) {
-        self.pc = addr;
+        self.pc.set(addr);
     }
 
     fn call_subroutine(&mut self, addr: Address) {
-        let current = self.pc;
-        self.advance_sp();
+        let current = self.pc.current;
         self.stack_push(current);
-        self.pc = addr;
+        self.pc.set(addr);
     }
 
     fn skip_if(&mut self, p: bool) {
-        if p { self.advance_pc(); }
-    }
-
-    fn load_i(&mut self, addr: Address) {
-        self.i = addr;
+        if p { self.pc.move_forward(); }
     }
 
     fn load(&mut self, x: Address, b: Byte) {
@@ -309,20 +291,21 @@ impl<'a> Cpu<'a> {
 
     fn store_bcd(&mut self, x: Address) {
         let vx = self.v[x];
-        self.memory[self.i] = vx / 100;
-        self.memory[self.i + 1] = vx % 100 / 10;
-        self.memory[self.i + 2] = vx % 10;
+        let i = self.i.current;
+        self.memory[i] = vx / 100;
+        self.memory[i + 1] = vx % 100 / 10;
+        self.memory[i + 2] = vx % 10;
     }
 
     fn store_registers_through(&mut self, x: Address) {
         for i in 0..x + 1 {
-            self.memory[self.i + i] = self.v[i];
+            self.memory[self.i.current + i] = self.v[i];
         }
     }
 
     fn read_registers_through(&mut self, x: Address) {
         for i in 0..x + 1 {
-            self.v[i] = self.memory[self.i + i];
+            self.v[i] = self.memory[self.i.current + i];
         }
     }
 
