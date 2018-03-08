@@ -47,7 +47,8 @@ impl<'a> Cpu<'a> {
     }
 
     pub fn step(&mut self) {
-        let opcode: Opcode = self.fetch();
+        let opcode = self.fetch_opcode();
+        self.advance_pc();
         self.execute(&opcode);
 
         self.dt.tick();
@@ -60,12 +61,9 @@ impl<'a> Cpu<'a> {
         }
     }
 
-    fn fetch(&mut self) -> Opcode {
-        let a = self.current_val();
-        self.advance_pc();
-        let b = self.current_val();
-
-        Opcode::from_bytes((a, b))
+    fn fetch_opcode(&mut self) -> Opcode {
+        let bytes = (self.memory[self.pc], self.memory[self.pc + 1]);
+        Opcode::from_bytes(bytes)
     }
 
     fn execute(&mut self, opcode: &Opcode) {
@@ -158,6 +156,7 @@ impl<'a> Cpu<'a> {
                         let vx = self.v[x];
                         let addr = self.i.wrapping_add(vx as Address);
                         self.load_i(addr);
+
                     },
                     0x29 => {
                         let vx = self.v[x];
@@ -183,7 +182,7 @@ impl<'a> Cpu<'a> {
     }
 
     fn advance_pc(&mut self) {
-        self.pc += 1;
+        self.pc += 2;
     }
 
     fn advance_sp(&mut self) {
@@ -231,12 +230,8 @@ impl<'a> Cpu<'a> {
         self.pc = addr;
     }
 
-    fn skip_next_instruction(&mut self) {
-        self.pc += 2;
-    }
-
     fn skip_if(&mut self, p: bool) {
-        if p { self.skip_next_instruction(); }
+        if p { self.advance_pc(); }
     }
 
     fn load_i(&mut self, addr: Address) {
