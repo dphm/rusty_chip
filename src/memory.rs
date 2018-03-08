@@ -54,8 +54,7 @@ impl Index<Range<Address>> for Memory {
 
 impl Debug for Memory {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let hex_bytes = self.mem.iter()
-            .map(|byte| format!("{:02x}", &byte));
+        let hex_bytes = self.mem.iter().map(|byte| format!("{:02x}", &byte));
 
         let lines = hex_bytes.enumerate()
             .fold(String::new(), |mut acc, (i, hex_byte)| {

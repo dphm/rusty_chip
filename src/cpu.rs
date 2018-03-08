@@ -9,6 +9,7 @@ extern crate rand;
 
 use self::rand::Rng;
 use std::ops::Range;
+use std::fmt::{self, Display};
 
 use memory::Memory;
 use timer::Timer;
@@ -55,6 +56,18 @@ impl<'a> Cpu<'a> {
 
         self.dt.tick();
         self.st.tick();
+    }
+
+    pub fn display_data(&self) -> Vec<bool> {
+        self.memory[DISPLAY_RANGE].iter()
+            .fold(Vec::new(), |mut acc, byte| {
+                let string = format!("{:08b}", byte);
+                for c in string.chars() {
+                    let b = c != '0';
+                    acc.push(b);
+                }
+                acc
+            })
     }
 
     fn fetch_opcode(&mut self) -> Opcode {
@@ -322,16 +335,13 @@ impl<'a> Cpu<'a> {
     }
 
     fn draw_sprite(&mut self, x: Register, y: Register, n: usize) {
-        let vx = self.v[x];
-        let vy = self.v[y];
+        let vx = self.v[x] as Address;
+        let vy = self.v[y] as Address;
         let i = self.i.current;
         let sprite_bytes = self.memory[i..i + n].to_vec();
-
-        let row = vy as Address;
-        let col = vx as Address / graphics::SPRITE_WIDTH;
-
+        let col = vx / graphics::SPRITE_WIDTH;
         for row in 0..n {
-            let mem_addr = row * 8 + col;
+            let mem_addr = DISPLAY_RANGE.start + (vy + row) * 8 + col;
             let mem_byte = self.memory[mem_addr];
             let sprite_byte = sprite_bytes[row];
             self.memory[mem_addr] = mem_byte ^ sprite_byte;
@@ -342,5 +352,27 @@ impl<'a> Cpu<'a> {
                 self.set_flag(0b1);
             }
         }
+
+        println!("{}", self);
+    }
+}
+
+impl<'a> Display for Cpu<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let lines = self.display_data().iter().enumerate()
+            .fold(String::new(), |mut acc, (i, bit)| {
+                if (i % graphics::SCREEN_WIDTH) == 0 {
+                    acc.push_str(&format!("\n{:02} ", i / 64));
+                }
+
+                let c = match *bit {
+                    true => "⬜️",
+                    false => "⬛️"
+                };
+
+                acc.push_str(c);
+                acc
+            });
+        write!(f, "{}", lines)
     }
 }
