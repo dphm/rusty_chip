@@ -54,10 +54,7 @@ impl<'a> Cpu<'a> {
         self.dt.tick();
         self.st.tick();
 
-        if self.pc + 1 >= ROM_RANGE.end {
-            self.exit = true;
-            return;
-        }
+        self.exit = (self.pc >= ROM_RANGE.end) | (self.i >= ROM_RANGE.end);
     }
 
     fn fetch_opcode(&mut self) -> Opcode {
