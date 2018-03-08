@@ -24,9 +24,9 @@ type Byte = u8;
 #[derive(Debug)]
 pub struct Cpu<'a> {
     pub exit: bool,
-    pc: Pointer,
-    sp: Pointer,
-    i: Pointer,
+    pc: Pointer<'a>,
+    sp: Pointer<'a>,
+    i: Pointer<'a>,
     dt: Timer,
     st: Timer,
     v: [Byte; NUM_REGISTERS],
@@ -37,9 +37,9 @@ impl<'a> Cpu<'a> {
     pub fn new(memory: &'a mut Memory, rom: &Vec<Byte>) -> Cpu<'a> {
         Cpu {
             exit: false,
-            pc: Pointer::new(ROM_RANGE),
-            sp: Pointer::new(STACK_RANGE),
-            i: Pointer::new(ROM_RANGE),
+            pc: Pointer::new(&ROM_RANGE),
+            sp: Pointer::new(&STACK_RANGE),
+            i: Pointer::new(&ROM_RANGE),
             dt: Timer::new(60),
             st: Timer::new(60),
             v: [0x0; NUM_REGISTERS],
