@@ -39,7 +39,7 @@ impl<'a> Cpu<'a> {
             exit: false,
             pc: Pointer::new(&ROM_RANGE),
             sp: Pointer::new(&STACK_RANGE),
-            i: Pointer::new(&ROM_RANGE),
+            i: Pointer::new(&(FONT_RANGE.start..ROM_RANGE.end)),
             dt: Timer::new(60),
             st: Timer::new(60),
             v: [0x0; NUM_REGISTERS],
