@@ -17,6 +17,7 @@ use opcode::Opcode;
 use output::font;
 
 type Address = usize;
+type Register = usize;
 type Byte = u8;
 
 #[derive(Debug)]
@@ -174,7 +175,7 @@ impl<'a> Cpu<'a> {
     }
 
     fn set_flag(&mut self, val: Byte) {
-        self.v[0xF] = val;
+        self.load(0xF, val);
     }
 
     fn clear_display(&mut self) {
@@ -216,30 +217,35 @@ impl<'a> Cpu<'a> {
         if p { self.pc.move_forward(); }
     }
 
-    fn load(&mut self, x: Address, b: Byte) {
+    fn load(&mut self, x: Register, b: Byte) {
         self.v[x] = b;
     }
 
-    fn add(&mut self, x: Address, b: Byte) {
-        self.v[x] = self.v[x].wrapping_add(b);
+    fn add(&mut self, x: Register, b: Byte) {
+        let result = self.v[x].wrapping_add(b);
+        self.load(x, result);
     }
 
-    fn or(&mut self, x: Address, y: Address) {
-        self.v[x] = self.v[x] | self.v[y];
+    fn or(&mut self, x: Register, y: Register) {
+        let result = self.v[x] | self.v[y];
+        self.load(x, result);
     }
 
-    fn and(&mut self, x: Address, y: Address) {
-        self.v[x] = self.v[x] & self.v[y];
+    fn and(&mut self, x: Register, y: Register) {
+        let result = self.v[x] & self.v[y];
+        self.load(x, result);
     }
 
-    fn xor(&mut self, x: Address, y: Address) {
-        self.v[x] = self.v[x] ^ self.v[y];
+    fn xor(&mut self, x: Register, y: Register) {
+        let result = self.v[x] ^ self.v[y];
+        self.load(x, result);
     }
 
-    fn add_with_carry(&mut self, x: Address, y: Address) {
+    fn add_with_carry(&mut self, x: Register, y: Register) {
         let vx = self.v[x];
         let vy = self.v[y];
-        self.v[x] = vx.wrapping_add(vy);
+        let result = vx.wrapping_add(vy);
+        self.load(x, result);
 
         if (vx as u16) + (vy as u16) > 0xFF {
             self.set_flag(0b1);
@@ -248,10 +254,11 @@ impl<'a> Cpu<'a> {
         }
     }
 
-    fn subtract_without_borrow(&mut self, x: Address, y: Address) {
+    fn subtract_without_borrow(&mut self, x: Register, y: Register) {
         let vx = self.v[x];
         let vy = self.v[y];
-        self.v[x] = vx.wrapping_sub(vy);
+        let result = vx.wrapping_sub(vy);
+        self.load(x, result);
 
         if vx >= vy {
             self.set_flag(0b1);
@@ -260,10 +267,11 @@ impl<'a> Cpu<'a> {
         }
     }
 
-    fn subtract_neg_without_borrow(&mut self, x: Address, y: Address) {
+    fn subtract_neg_without_borrow(&mut self, x: Register, y: Register) {
         let vx = self.v[x];
         let vy = self.v[y];
-        self.v[x] = vy.wrapping_sub(vx);
+        let result = vy.wrapping_sub(vx);
+        self.load(x, result);
 
         if vx <= vy {
             self.set_flag(0b1);
@@ -272,24 +280,27 @@ impl<'a> Cpu<'a> {
         }
     }
 
-    fn shift_right(&mut self, x: Address) {
+    fn shift_right(&mut self, x: Register) {
         let least_sig = self.v[x] % 2;
         self.set_flag(least_sig);
-        self.v[x] = self.v[x] >> 1;
+        let result = self.v[x] >> 1;
+        self.load(x, result);
     }
 
-    fn shift_left(&mut self, x: Address) {
+    fn shift_left(&mut self, x: Register) {
         let most_sig = self.v[x] >> 7;
         self.set_flag(most_sig);
-        self.v[x] = self.v[x] << 1;
+        let result = self.v[x] << 1;
+        self.load(x, result);
     }
 
-    fn random_and(&mut self, x: Address, byte: Byte) {
+    fn random_and(&mut self, x: Register, byte: Byte) {
         let random_byte: Byte = rand::thread_rng().gen_range(0x0, 0xFF);
-        self.v[x] = byte & random_byte;
+        let result = byte & random_byte;
+        self.load(x, result);
     }
 
-    fn store_bcd(&mut self, x: Address) {
+    fn store_bcd(&mut self, x: Register) {
         let vx = self.v[x];
         let i = self.i.current;
         self.memory[i] = vx / 100;
@@ -297,19 +308,20 @@ impl<'a> Cpu<'a> {
         self.memory[i + 2] = vx % 10;
     }
 
-    fn store_registers_through(&mut self, x: Address) {
-        for i in 0..x + 1 {
-            self.memory[self.i.current + i] = self.v[i];
+    fn store_registers_through(&mut self, x: Register) {
+        for r in 0..x + 1 {
+            self.memory[self.i.current + r] = self.v[r];
         }
     }
 
-    fn read_registers_through(&mut self, x: Address) {
-        for i in 0..x + 1 {
-            self.v[i] = self.memory[self.i.current + i];
+    fn read_registers_through(&mut self, x: Register) {
+        for r in 0..x + 1 {
+            let val = self.memory[self.i.current + r];
+            self.load(r, val);
         }
     }
 
-    fn draw_sprite(&mut self, x: Address, y: Address, n: usize) {
+    fn draw_sprite(&mut self, x: Register, y: Register, n: usize) {
         // Draw n-byte sprite with memory starting at I at (x, y)
         // Set flag if collision
     }
