@@ -71,6 +71,14 @@ impl Cpu {
             })
     }
 
+    pub fn pc(&self) -> &Pointer {
+        &self.pc
+    }
+
+    pub fn v(&self) -> [Byte; NUM_REGISTERS] {
+        self.v
+    }
+
     fn fetch_opcode(&mut self) -> Opcode {
         let current = self.pc.current;
         let bytes = (self.memory[current], self.memory[current + 1]);
@@ -81,6 +89,7 @@ impl Cpu {
         match opcode.first_hex_digit() {
             0x0 => {
                 match opcode.kk() {
+                    0x00 => (),
                     0xE0 => self.clear_display(),
                     0xEE => self.return_from_subroutine(),
                     _ => self.unknown_opcode(&opcode)
@@ -214,7 +223,7 @@ impl Cpu {
 
     fn return_from_subroutine(&mut self) {
         let addr = self.stack_pop();
-        self.pc.set(addr);
+        self.jump(addr);
     }
 
     fn jump(&mut self, addr: Address) {
@@ -224,7 +233,7 @@ impl Cpu {
     fn call_subroutine(&mut self, addr: Address) {
         let current = self.pc.current;
         self.stack_push(current);
-        self.pc.set(addr);
+        self.jump(addr);
     }
 
     fn skip_if(&mut self, p: bool) {

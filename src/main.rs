@@ -1,7 +1,7 @@
 extern crate rusty_chip;
 
 fn main() {
-    let rom = rusty_chip::load_rom("rom/logo.ch8").expect("Unable to load ROM");
+    let rom = rusty_chip::load_rom("../rom" ,"ibm.ch8");
     let mut cpu = rusty_chip::init_cpu(rom);
 
     loop {
