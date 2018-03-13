@@ -30,11 +30,15 @@ pub struct Cpu<'a> {
     dt: Timer,
     st: Timer,
     v: [Byte; NUM_REGISTERS],
-    memory: &'a mut Memory
+    memory: Memory
 }
 
 impl<'a> Cpu<'a> {
-    pub fn new(memory: &'a mut Memory, rom: &Vec<Byte>) -> Cpu<'a> {
+    pub fn new(rom: &Vec<Byte>) -> Cpu<'a> {
+        let mut memory = Memory::new();
+        memory.load(&font::FONT_SET, &FONT_RANGE);
+        memory.load(&rom, &ROM_RANGE);
+
         Cpu {
             exit: false,
             pc: Pointer::new(&ROM_RANGE),
@@ -44,8 +48,6 @@ impl<'a> Cpu<'a> {
             st: Timer::new(60),
             v: [0x0; NUM_REGISTERS],
             memory: memory
-                .load(&font::FONT_SET, &FONT_RANGE)
-                .load(&rom, &ROM_RANGE)
         }
     }
 
