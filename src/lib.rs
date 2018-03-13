@@ -14,6 +14,7 @@ use std::path::Path;
 use cpu::Cpu;
 
 type Byte = u8;
+type Address = usize;
 
 pub fn init_cpu<'a>(rom: Vec<Byte>) -> Cpu<'a> {
     Cpu::new(&rom)
@@ -32,3 +33,6 @@ fn read_bytes(file: &mut File) -> Result<Vec<Byte>, Error> {
         Err(e) => Err(e)
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -1,5 +1,4 @@
-type Address = usize;
-type Byte = u8;
+use {Address, Byte};
 
 const NUM_SPRITES: usize = 16;
 const SPRITE_HEIGHT: usize = 5;
@@ -105,16 +104,4 @@ pub const FONT_SET: [Byte; NUM_SPRITES * SPRITE_HEIGHT] = [
 
 pub fn sprite_addr(digit: Byte) -> Address {
     (digit as Address) * SPRITE_HEIGHT
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sprite_addresses() {
-        for i in 0..NUM_SPRITES {
-            assert_eq!(i * 5, sprite_addr(i as Byte));
-        }
-    }
 }

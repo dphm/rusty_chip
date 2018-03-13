@@ -17,9 +17,8 @@ use pointer::Pointer;
 use opcode::Opcode;
 use output::{font, graphics};
 
-type Address = usize;
+use {Address, Byte};
 type Register = usize;
-type Byte = u8;
 
 #[derive(Debug)]
 pub struct Cpu<'a> {

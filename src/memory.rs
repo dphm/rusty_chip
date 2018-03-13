@@ -1,8 +1,7 @@
 use std::fmt::{self, Debug};
 use std::ops::{Index, IndexMut, Range};
 
-type Address = usize;
-type Byte = u8;
+use {Address, Byte};
 
 pub struct Memory {
     mem: [Byte; Memory::MAX_SIZE]
@@ -64,46 +63,5 @@ impl Debug for Memory {
             });
 
         write!(f, "{}", lines)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn load_data_with_len_equal_range() {
-        let data: Vec<Byte> = vec![0xA, 0xB, 0xC, 0xD, 0xE];
-        let range: Range<Address> = 0x0..0x5;
-        let mut memory = Memory::new();
-
-        memory.load(&data, &range);
-        assert_eq!(0xA, memory.mem[0x0]);
-        assert_eq!(0xB, memory.mem[0x1]);
-        assert_eq!(0xC, memory.mem[0x2]);
-        assert_eq!(0xD, memory.mem[0x3]);
-        assert_eq!(0xE, memory.mem[0x4]);
-    }
-
-    #[test]
-    fn load_data_with_len_less_than_range() {
-        let data: Vec<Byte> = vec![0xA, 0xB, 0xC];
-        let range: Range<Address> = 0x0..0x5;
-        let mut memory = Memory::new();
-
-        memory.load(&data, &range);
-        assert_eq!(0xA, memory.mem[0x0]);
-        assert_eq!(0xB, memory.mem[0x1]);
-        assert_eq!(0xC, memory.mem[0x2]);
-    }
-
-    #[test]
-    #[should_panic(expected = "Data length")]
-    fn load_data_with_len_greater_than_range_panics() {
-        let data: Vec<Byte> = vec![0xA, 0xB, 0xC, 0xD, 0xE, 0xF];
-        let range: Range<Address> = 0x0..0x5;
-        let mut memory = Memory::new();
-
-        memory.load(&data, &range);
     }
 }
