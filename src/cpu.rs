@@ -21,28 +21,28 @@ use {Address, Byte};
 type Register = usize;
 
 #[derive(Debug)]
-pub struct Cpu<'a> {
+pub struct Cpu {
     pub exit: bool,
-    pc: Pointer<'a>,
-    sp: Pointer<'a>,
-    i: Pointer<'a>,
+    pc: Pointer,
+    sp: Pointer,
+    i: Pointer,
     dt: Timer,
     st: Timer,
     v: [Byte; NUM_REGISTERS],
     memory: Memory
 }
 
-impl<'a> Cpu<'a> {
-    pub fn new(rom: &Vec<Byte>) -> Cpu<'a> {
+impl Cpu {
+    pub fn new(rom: &Vec<Byte>) -> Cpu {
         let mut memory = Memory::new();
-        memory.load(&font::FONT_SET, &FONT_RANGE);
-        memory.load(&rom, &ROM_RANGE);
+        memory.load(&font::FONT_SET, FONT_RANGE);
+        memory.load(&rom, ROM_RANGE);
 
         Cpu {
             exit: false,
-            pc: Pointer::new(&ROM_RANGE),
-            sp: Pointer::new(&STACK_RANGE),
-            i: Pointer::new(&(FONT_RANGE.start..ROM_RANGE.end)),
+            pc: Pointer::new(ROM_RANGE),
+            sp: Pointer::new(STACK_RANGE),
+            i: Pointer::new(FONT_RANGE.start..ROM_RANGE.end),
             dt: Timer::new(60),
             st: Timer::new(60),
             v: [0x0; NUM_REGISTERS],
@@ -358,7 +358,7 @@ impl<'a> Cpu<'a> {
     }
 }
 
-impl<'a> Display for Cpu<'a> {
+impl Display for Cpu {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let lines = self.display_data().iter().enumerate()
             .fold(String::new(), |mut acc, (i, bit)| {

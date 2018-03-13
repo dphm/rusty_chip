@@ -16,7 +16,7 @@ use cpu::Cpu;
 type Byte = u8;
 type Address = usize;
 
-pub fn init_cpu<'a>(rom: Vec<Byte>) -> Cpu<'a> {
+pub fn init_cpu(rom: Vec<Byte>) -> Cpu {
     Cpu::new(&rom)
 }
 

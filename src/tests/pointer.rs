@@ -3,42 +3,40 @@ use pointer::Pointer;
 
 use Address;
 
+const TEST_RANGE: Range<Address> = 0x100..0xF00;
+
 #[test]
 fn current_defaults_to_range_start() {
-    let range: Range<Address> = 0x100..0xF00;
-    let p = Pointer::new(&range);
-    assert_eq!(0x100, p.current);
+    let p = Pointer::new(TEST_RANGE);
+    assert_eq!(TEST_RANGE.start, p.current);
 }
 
 #[test]
 fn move_forward_adds_2_to_current() {
-    let range: Range<Address> = 0x100..0xF00;
-    let mut p = Pointer::new(&range);
+    let mut p = Pointer::new(TEST_RANGE);
 
     p.move_forward();
-    assert_eq!(0x102, p.current);
+    assert_eq!(TEST_RANGE.start + 2, p.current);
 
     p.move_forward();
-    assert_eq!(0x104, p.current);
+    assert_eq!(TEST_RANGE.start + 4, p.current);
 }
 
 #[test]
 fn move_backward_subtracts_2_from_current() {
-    let range: Range<Address> = 0x100..0xF00;
-    let mut p = Pointer::new(&range);
-    p.current = 0xF00;
+    let mut p = Pointer::new(TEST_RANGE);
+    p.current = TEST_RANGE.end;
 
     p.move_backward();
-    assert_eq!(0xEFE, p.current);
+    assert_eq!(TEST_RANGE.end - 2, p.current);
 
     p.move_backward();
-    assert_eq!(0xEFC, p.current);
+    assert_eq!(TEST_RANGE.end - 4, p.current);
 }
 
 #[test]
 fn set_current() {
-    let range: Range<Address> = 0x100..0xF00;
-    let mut p = Pointer::new(&range);
+    let mut p = Pointer::new(TEST_RANGE);
     let addr = 0xABC;
 
     p.set(addr);

@@ -3,14 +3,14 @@ use std::ops::Range;
 
 use Address;
 
-pub struct Pointer<'a> {
+pub struct Pointer {
     pub current: Address,
-    range: &'a Range<Address>,
+    range: Range<Address>,
     step_size: usize,
 }
 
-impl<'a> Pointer<'a> {
-    pub fn new(range: &Range<Address>) -> Pointer {
+impl Pointer {
+    pub fn new(range: Range<Address>) -> Pointer {
         Pointer {
             current: range.start,
             range,
@@ -54,7 +54,7 @@ impl<'a> Pointer<'a> {
     }
 }
 
-impl<'a> Debug for Pointer<'a> {
+impl Debug for Pointer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f,
             "Pointer {{ current: {:x}, range: {:x}..{:x}, step_size: {} }}",

@@ -16,7 +16,7 @@ impl Memory {
         }
     }
 
-    pub fn load(&mut self, data: &[Byte], range: &Range<Address>) {
+    pub fn load(&mut self, data: &[Byte], range: Range<Address>) {
         for i in 0..data.len() {
             if i >= range.end {
                 panic!("Data length {:?} is greater than range size {:?}", data.len(), range);

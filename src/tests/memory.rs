@@ -9,7 +9,7 @@ fn load_data_with_len_equal_range() {
     let range: Range<Address> = 0x0..0x5;
     let mut memory = Memory::new();
 
-    memory.load(&data, &range);
+    memory.load(&data, range);
     assert_eq!(0xA, memory[0x0]);
     assert_eq!(0xB, memory[0x1]);
     assert_eq!(0xC, memory[0x2]);
@@ -23,7 +23,7 @@ fn load_data_with_len_less_than_range() {
     let range: Range<Address> = 0x0..0x5;
     let mut memory = Memory::new();
 
-    memory.load(&data, &range);
+    memory.load(&data, range);
     assert_eq!(0xA, memory[0x0]);
     assert_eq!(0xB, memory[0x1]);
     assert_eq!(0xC, memory[0x2]);
@@ -36,5 +36,5 @@ fn load_data_with_len_greater_than_range_panics() {
     let range: Range<Address> = 0x0..0x5;
     let mut memory = Memory::new();
 
-    memory.load(&data, &range);
+    memory.load(&data, range);
 }
