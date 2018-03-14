@@ -362,7 +362,7 @@ impl Cpu {
             let mut from_bytes = vec![self.memory[mem_addr]];
             let mut to_bytes = vec![sprite_byte.wrapping_shr(offset_x as u32)];
 
-            if offset_x > 0 {
+            if offset_x > 0 && ((mem_addr + 1) < DISPLAY_RANGE.end) {
                 from_bytes.push(self.memory[mem_addr + 1]);
                 to_bytes.push(sprite_byte
                     .wrapping_shl((graphics::SPRITE_WIDTH_PIXELS - offset_x) as u32)
