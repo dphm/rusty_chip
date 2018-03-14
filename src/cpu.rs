@@ -120,6 +120,10 @@ impl Cpu {
                 let x = opcode.x();
                 let y = opcode.y();
                 match opcode.k() {
+                    0x0 => {
+                        let vy = self.v[y];
+                        self.load(x, vy);
+                    },
                     0x1 => self.or(x, y),
                     0x2 => self.and(x, y),
                     0x3 => self.xor(x, y),
