@@ -349,17 +349,31 @@ impl Cpu {
         let vy = self.v[y] as Address;
         let i = self.i.current;
         let sprite_bytes = self.memory[i..i + n].to_vec();
-        let col = vx / graphics::SPRITE_WIDTH;
-        for row in 0..n {
-            let mem_addr = DISPLAY_RANGE.start + (vy + row) * 8 + col;
-            let mem_byte = self.memory[mem_addr];
-            let sprite_byte = sprite_bytes[row];
-            self.memory[mem_addr] = mem_byte ^ sprite_byte;
 
-            if mem_byte & sprite_byte == 0x0 {
-                self.set_flag(0b0);
-            } else {
-                self.set_flag(0b1);
+        let byte_x = vx / graphics::SPRITE_WIDTH_PIXELS;
+        let offset_x = vx % graphics::SPRITE_WIDTH_PIXELS;
+
+        for row in 0..n {
+            let sprite_byte = sprite_bytes[row];
+            let mem_addr = DISPLAY_RANGE.start +
+                (vy + row) * graphics::SCREEN_WIDTH_SPRITES +
+                byte_x;
+
+            let mut from_bytes = vec![self.memory[mem_addr]];
+            let mut to_bytes = vec![sprite_byte.wrapping_shr(offset_x as u32)];
+
+            if offset_x > 0 {
+                from_bytes.push(self.memory[mem_addr + 1]);
+                to_bytes.push(sprite_byte
+                    .wrapping_shl((graphics::SPRITE_WIDTH_PIXELS - offset_x) as u32)
+                );
+            }
+
+            self.set_flag(0b0);
+            for i in 0..from_bytes.len() {
+                self.memory[mem_addr + i] = from_bytes[i] ^ to_bytes[i];
+                let collision = (from_bytes[i] & to_bytes[i]) > 0;
+                if collision { self.set_flag(0b1); }
             }
         }
 
@@ -371,7 +385,7 @@ impl Display for Cpu {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let lines = self.display_data().iter().enumerate()
             .fold(String::new(), |mut acc, (i, bit)| {
-                if (i % graphics::SCREEN_WIDTH) == 0 {
+                if (i % graphics::SCREEN_WIDTH_PIXELS) == 0 {
                     acc.push_str(&format!("\n{:02} ", i / 64));
                 }
 
