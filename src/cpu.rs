@@ -144,14 +144,14 @@ impl Cpu {
                 self.i.set(opcode.nnn());
             },
             0xB => {
-                let v0 = self.v[0];
-                self.jump(opcode.nnn() + (v0 as Address));
+                let v0 = self.v[0] as Address;
+                self.jump(opcode.nnn() + v0);
             },
             0xC => {
                 self.random_and(opcode.x(), opcode.kk());
             },
             0xD => {
-                self.draw_sprite(opcode.x(), opcode.y(), opcode.k() as usize);
+                self.draw_sprite(opcode.x(), opcode.y(), opcode.k());
             },
             0xE => {
                 match opcode.kk() {

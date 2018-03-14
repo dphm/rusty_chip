@@ -37,8 +37,8 @@ impl Opcode {
         (self.code & 0xFF) as Byte
     }
 
-    pub fn k(&self) -> Byte {
-        (self.code & 0xF) as Byte
+    pub fn k(&self) -> usize {
+        (self.code & 0xF) as usize
     }
 }
 
