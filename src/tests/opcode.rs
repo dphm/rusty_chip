@@ -65,5 +65,5 @@ fn mask_kk() {
 fn mask_k() {
     let code = 0xABCD;
     let opcode = Opcode::new(code);
-    assert_eq!(0xD as Byte, opcode.k());
+    assert_eq!(0xD as usize, opcode.k());
 }

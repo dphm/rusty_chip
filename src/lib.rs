@@ -3,9 +3,10 @@
 mod cpu;
 mod memory;
 mod opcode;
-mod timer;
-mod pointer;
+mod ops;
 mod output;
+mod pointer;
+mod timer;
 
 use std::io::{BufReader, Read};
 use std::fs::File;

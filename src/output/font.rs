@@ -1,4 +1,4 @@
-use {Address, Byte};
+use Byte;
 
 const NUM_SPRITES: usize = 16;
 pub const SPRITE_HEIGHT: usize = 5;
