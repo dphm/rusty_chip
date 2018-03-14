@@ -177,14 +177,14 @@ impl Cpu {
                         self.st.set(vx);
                     },
                     0x1E => {
-                        let vx = self.v[x];
-                        let addr = self.i.current.wrapping_add(vx as Address);
+                        let vx = self.v[x] as Address;
+                        let addr = self.i.current.wrapping_add(vx);
                         self.i.set(addr);
 
                     },
                     0x29 => {
-                        let vx = self.v[x];
-                        let addr = font::sprite_addr(vx);
+                        let vx = self.v[x] as Address;
+                        let addr = vx * font::SPRITE_HEIGHT;
                         self.i.set(addr);
                     },
                     0x33 => self.store_bcd(x),

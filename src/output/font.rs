@@ -1,8 +1,7 @@
 use {Address, Byte};
 
 const NUM_SPRITES: usize = 16;
-const SPRITE_HEIGHT: usize = 5;
-
+pub const SPRITE_HEIGHT: usize = 5;
 pub const FONT_SET: [Byte; NUM_SPRITES * SPRITE_HEIGHT] = [
     // 0
     0b11110000,
@@ -101,7 +100,3 @@ pub const FONT_SET: [Byte; NUM_SPRITES * SPRITE_HEIGHT] = [
     0b10000000,
     0b10000000
 ];
-
-pub fn sprite_addr(digit: Byte) -> Address {
-    (digit as Address) * SPRITE_HEIGHT
-}
