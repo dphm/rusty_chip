@@ -237,8 +237,8 @@ impl Display for Cpu {
                 }
 
                 let c = match *bit {
-                    true => "⬜️",
-                    false => "⬛️"
+                    true => "  ",
+                    false => "▓▓︎"
                 };
 
                 acc.push_str(c);

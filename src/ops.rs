@@ -224,6 +224,10 @@ pub fn draw_vx_vy_n(cpu: &mut Cpu, opcode: &Opcode) {
     }
 
     println!("\tDRW V{:x}: {:x}, V{:x}: {:x}, {:?}", x, vx, y, vy, sprite_bytes);
+    print!("   ");
+    for i in 0..graphics::SCREEN_WIDTH_SPRITES {
+        print!("{}               ", i);
+    }
     println!("{}", cpu);
 }
 
