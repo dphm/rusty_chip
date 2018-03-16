@@ -51,6 +51,7 @@ impl Cpu {
     pub fn step(&mut self) {
         let opcode = self.fetch_opcode();
         let op = self.operation(&opcode);
+        println!("[#{:x}] {}", self.pc.current, opcode);
         op(self, &opcode);
 
         self.pc.move_forward();
@@ -183,6 +184,10 @@ impl Cpu {
 
     pub fn load_delay_timer(&mut self, val: Byte) {
         self.dt.set(val);
+    }
+
+    pub fn read_sound_timer(&mut self) -> Byte {
+        self.st.current
     }
 
     pub fn load_sound_timer(&mut self, val: Byte) {
