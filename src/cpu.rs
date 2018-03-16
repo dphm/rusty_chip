@@ -40,7 +40,7 @@ impl Cpu {
             exit: false,
             pc: Pointer::new(ROM_RANGE),
             sp: Pointer::new(STACK_RANGE),
-            i: Pointer::new(FONT_RANGE.start..STACK_RANGE.end),
+            i: Pointer::new(FONT_RANGE.start..ROM_RANGE.end),
             dt: Timer::new(60),
             st: Timer::new(60),
             v: [0x0; NUM_REGISTERS],
@@ -90,9 +90,9 @@ impl Cpu {
                     0x3 => ops::xor_vx_vy,
                     0x4 => ops::add_vx_vy,
                     0x5 => ops::sub_vx_vy,
-                    0x6 => ops::shr_vx,
+                    0x6 => ops::shr_vx_vy,
                     0x7 => ops::subn_vx_vy,
-                    0xE => ops::shl_vx,
+                    0xE => ops::shl_vx_vy,
                     _ => ops::unknown
                 }
             },
@@ -115,7 +115,7 @@ impl Cpu {
                     0x15 => ops::load_dt_vx,
                     0x18 => ops::load_st_vx,
                     0x1E => ops::add_i_vx,
-                    0x29 => ops::load_font_vx,
+                    0x29 => ops::load_i_vx_font,
                     0x33 => ops::load_bcd_vx,
                     0x55 => ops::load_through_vx,
                     0x65 => ops::read_through_vx,
@@ -163,15 +163,18 @@ impl Cpu {
         self.memory[i..i + n].to_vec()
     }
 
-    pub fn load_image_bytes(&mut self, addr: Address, to_bytes: Vec<Byte>) -> bool {
-        let mut collision = false;
-        for i in 0..to_bytes.len() {
-            let from_byte = self.memory[DISPLAY_RANGE.start + addr + i];
-            let to_byte = to_bytes[i];
-            self.memory[DISPLAY_RANGE.start + addr + i] = from_byte ^ to_byte;
-            if (from_byte & to_byte) > 0 { collision = true; }
-        }
-        collision
+    pub fn load_image_byte(&mut self, x: Address, y: Address, to_byte: Byte) -> bool {
+        let from_addr = DISPLAY_RANGE.start + y * graphics::SCREEN_WIDTH_SPRITES + x;
+        let from_byte = self.memory[from_addr];
+        self.memory[from_addr] = from_byte ^ to_byte;
+        (from_byte & to_byte) > 0
+    }
+
+    pub fn load_image_bytes(&mut self, to_bytes: Vec<Byte>) -> bool {
+        let i = self.read_i();
+        to_bytes.iter().any(|to_byte| {
+            self.load_image_byte(i, 0, *to_byte)
+        })
     }
 
     pub fn read_delay_timer(&self) -> Byte {
@@ -202,8 +205,8 @@ impl Cpu {
     }
 
     pub fn clear_display(&mut self) {
-        for i in DISPLAY_RANGE {
-            self.memory[i] = 0x0;
+        for addr in DISPLAY_RANGE {
+            self.memory[addr] = 0x0;
         }
     }
 
@@ -224,7 +227,7 @@ impl Display for Cpu {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let lines = self.display_data().iter().enumerate()
             .fold(String::new(), |mut acc, (i, bit)| {
-                if (i % graphics::SCREEN_WIDTH_PIXELS) == 0 {
+                if (i % graphics::SCREEN_WIDTH) == 0 {
                     acc.push_str(&format!("\n{:02} ", i / 64));
                 }
 

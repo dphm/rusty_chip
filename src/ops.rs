@@ -108,11 +108,10 @@ pub fn sub_vx_vy(cpu: &mut Cpu, opcode: &Opcode) {
     cpu.load_flag(!borrow);
 }
 
-pub fn shr_vx(cpu: &mut Cpu, opcode: &Opcode) {
-    let x = opcode.x();
-    let vx = cpu.read_register(x);
-    let (result, overflow) = vx.overflowing_shr(1);
-    cpu.load_register(x, result);
+pub fn shr_vx_vy(cpu: &mut Cpu, opcode: &Opcode) {
+    let vy = cpu.read_register(opcode.y());
+    let (result, overflow) = vy.overflowing_shr(1);
+    cpu.load_register(opcode.x(), result);
     cpu.load_flag(overflow);
 }
 
@@ -125,11 +124,10 @@ pub fn subn_vx_vy(cpu: &mut Cpu, opcode: &Opcode) {
     cpu.load_flag(!borrow);
 }
 
-pub fn shl_vx(cpu: &mut Cpu, opcode: &Opcode) {
-    let x = opcode.x();
-    let vx = cpu.read_register(x);
-    let (result, overflow) = vx.overflowing_shl(1);
-    cpu.load_register(x, result);
+pub fn shl_vx_vy(cpu: &mut Cpu, opcode: &Opcode) {
+    let vy = cpu.read_register(opcode.y());
+    let (result, overflow) = vy.overflowing_shl(1);
+    cpu.load_register(opcode.x(), result);
     cpu.load_flag(overflow);
 }
 
@@ -162,25 +160,27 @@ pub fn draw_vx_vy_n(cpu: &mut Cpu, opcode: &Opcode) {
     let n = opcode.k();
 
     let sprite_bytes = cpu.read_image_bytes(n);
-    let byte_x = vx / graphics::SPRITE_WIDTH_PIXELS;
-    let offset_x = vx % graphics::SPRITE_WIDTH_PIXELS;
+    let byte_x = (vx / graphics::SCREEN_WIDTH_SPRITES) % graphics::SCREEN_WIDTH_SPRITES;
+    let pixel_x = vx % graphics::SPRITE_WIDTH;
 
-    for offset_y in 0..n {
-        let byte_y = (vy + offset_y) * graphics::SCREEN_WIDTH_SPRITES;
-        let from_addr = byte_y + byte_x;
-        let sprite_byte = sprite_bytes[offset_y];
+    for sprite_y in 0..n {
+        let byte_y = (vy + sprite_y) % graphics::SCREEN_HEIGHT;
+        let sprite_byte = sprite_bytes[sprite_y];
+        let mut collision = match pixel_x {
+            0 => cpu.load_image_byte(byte_x, byte_y, sprite_byte),
+            _ => {
+                let shift_r = pixel_x as u32;
+                let left = sprite_byte.wrapping_shr(shift_r);
 
-        let mut to_bytes = Vec::new();
-        if offset_x == 0 {
-            to_bytes.push(sprite_byte);
-        } else {
-            let shift_r = offset_x as u32;
-            let shift_l = (graphics::SCREEN_WIDTH_PIXELS - offset_x) as u32;
-            to_bytes.push(sprite_byte.wrapping_shr(shift_r));
-            to_bytes.push(sprite_byte.wrapping_shl(shift_l));
-        }
+                let shift_l = (graphics::SPRITE_WIDTH - pixel_x) as u32;
+                let right = sprite_byte.wrapping_shl(shift_l);
+                let right_x = (byte_x + 1) % graphics::SCREEN_WIDTH_SPRITES;
 
-        let collision = cpu.load_image_bytes(from_addr, to_bytes);
+                cpu.load_image_byte(byte_x, byte_y, left) &
+                    cpu.load_image_byte(right_x, byte_y, right)
+            }
+        };
+
         cpu.load_flag(collision);
     }
 
@@ -214,35 +214,37 @@ pub fn add_i_vx(cpu: &mut Cpu, opcode: &Opcode) {
     cpu.load_i(i.wrapping_add(vx));
 }
 
-pub fn load_font_vx(cpu: &mut Cpu, opcode: &Opcode) {
+pub fn load_i_vx_font(cpu: &mut Cpu, opcode: &Opcode) {
     let vx = cpu.read_register(opcode.x()) as Address;
     cpu.load_i(vx * font::SPRITE_HEIGHT);
 }
 
 pub fn load_bcd_vx(cpu: &mut Cpu, opcode: &Opcode) {
     let vx = cpu.read_register(opcode.x());
-    let i = cpu.read_i();
     let bytes = vec![
         vx / 100,
         vx % 100 / 10,
         vx % 10
     ];
-    cpu.load_image_bytes(i, bytes);
+    cpu.load_image_bytes(bytes);
 }
 
 pub fn load_through_vx(cpu: &mut Cpu, opcode: &Opcode) {
     let x = opcode.x();
     let i = cpu.read_i();
     let bytes = (0..x + 1).map(|r| cpu.read_register(r)).collect();
-    cpu.load_image_bytes(i, bytes);
+    cpu.load_image_bytes(bytes);
+    cpu.load_i(i + x + 1);
 }
 
 pub fn read_through_vx(cpu: &mut Cpu, opcode: &Opcode) {
     let x = opcode.x();
+    let i = cpu.read_i();
     let bytes = cpu.read_image_bytes(x + 1);
     for (r, byte) in bytes.iter().enumerate() {
         cpu.load_register(r, *byte);
     }
+    cpu.load_i(i + x + 1);
 }
 
 fn skip_if(cpu: &mut Cpu, p: bool) {
