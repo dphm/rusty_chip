@@ -1,8 +1,10 @@
+use std::cmp::PartialEq;
 use std::fmt::{self, Debug};
 use std::ops::{Index, IndexMut, Range};
 
 use {Address, Byte};
 
+#[derive(Clone)]
 pub struct Memory {
     mem: [Byte; Memory::MAX_SIZE]
 }
@@ -63,6 +65,12 @@ impl Debug for Memory {
             });
 
         write!(f, "{}", lines)
+    }
+}
+
+impl PartialEq for Memory {
+    fn eq(&self, other: &Memory) -> bool {
+        self.mem.to_vec() == other.mem.to_vec()
     }
 }
 

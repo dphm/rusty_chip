@@ -2,6 +2,7 @@ use std::fmt::{self, Debug, Display};
 
 use {Address, Byte};
 
+#[derive(PartialEq)]
 pub struct Opcode {
     code: u16
 }
@@ -57,7 +58,7 @@ impl Debug for Opcode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn mask_first_hex_digit() {
         let codes = [

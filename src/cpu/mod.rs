@@ -26,7 +26,7 @@ use output::{font, graphics};
 use {Address, Byte};
 type Register = usize;
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Cpu {
     pub exit: bool,
     pc: Pointer,
@@ -68,7 +68,7 @@ impl Cpu {
         self.st.tick();
     }
 
-    pub fn fetch_opcode(&mut self) -> Opcode {
+    pub fn fetch_opcode(&self) -> Opcode {
         let current = self.pc.current;
         let bytes = (self.memory[current], self.memory[current + 1]);
         Opcode::from_bytes(bytes)
@@ -555,5 +555,53 @@ impl Display for Cpu {
                 acc
             });
         write!(f, "{}", lines)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_loads_font_to_memory() {
+        let rom = Vec::new();
+        let cpu = Cpu::new(&rom);
+
+        let font_set = font::FONT_SET.to_vec();
+        let range = FONT_RANGE.start..FONT_RANGE.start + font::FONT_SET.len();
+        let mem = cpu.memory[range].to_vec();
+        assert_eq!(font_set, mem);
+    }
+
+    #[test]
+    fn new_loads_rom_to_memory() {
+        let rom = vec![0x00, 0x01, 0x02, 0x03];
+        let cpu = Cpu::new(&rom);
+        
+        let range = ROM_RANGE.start..ROM_RANGE.start + rom.len();
+        let mem = cpu.memory[range].to_vec();
+        assert_eq!(rom, mem);
+    }
+
+    #[test]
+    fn fetch_opcode_fetches_two_current_bytes() {
+        let rom = vec![0xAB, 0xCD, 0xEF, 0xFF];
+        let cpu = Cpu::new(&rom);
+
+        assert_eq!(Opcode::new(0xABCD), cpu.fetch_opcode());        
+    }
+
+    #[test]
+    fn operation_0000() {
+        let rom = vec![0xAB, 0xCD, 0xEF, 0xFF];
+        let mut cpu = Cpu::new(&rom);
+
+        let clone = cpu.clone();
+
+        let opcode = Opcode::new(0x0000);
+        let op = cpu.operation(&opcode);
+        op(&mut cpu, &opcode);
+
+        assert_eq!(clone, cpu);
     }
 }

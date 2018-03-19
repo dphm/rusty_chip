@@ -3,6 +3,7 @@ use std::ops::Range;
 
 use Address;
 
+#[derive(Clone, PartialEq)]
 pub struct Pointer {
     pub current: Address,
     range: Range<Address>,
