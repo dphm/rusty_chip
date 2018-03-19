@@ -7,18 +7,21 @@ const DISPLAY_RANGE: Range<Address> = 0xF00..Memory::MAX_SIZE;
 
 extern crate rand;
 
+mod opcode;
 mod ops;
+mod pointer;
+mod timer;
 
 use self::rand::Rng;
 use std::ops::Range;
 use std::fmt::{self, Display};
 
 use cpu::ops::Operation;
+use cpu::opcode::Opcode;
+use cpu::pointer::Pointer;
+use cpu::timer::Timer;
 use memory::Memory;
-use opcode::Opcode;
 use output::{font, graphics};
-use pointer::Pointer;
-use timer::Timer;
 
 use {Address, Byte};
 type Register = usize;
@@ -132,31 +135,31 @@ impl Cpu {
         }
     }
 
-    pub fn jump(&mut self, addr: Address) {
+    fn jump(&mut self, addr: Address) {
         self.pc.set(addr);
     }
 
-    pub fn skip(&mut self) {
+    fn skip(&mut self) {
         self.pc.move_forward();
     }
 
-    pub fn read_i(&self) -> Address {
+    fn read_i(&self) -> Address {
         self.i.current
     }
 
-    pub fn load_i(&mut self, addr: Address) {
+    fn load_i(&mut self, addr: Address) {
         self.i.set(addr);
     }
 
-    pub fn load_register(&mut self, register: Register, val: Byte) {
+    fn load_register(&mut self, register: Register, val: Byte) {
         self.v[register] = val;
     }
 
-    pub fn read_register(&self, register: Register) -> Byte {
+    fn read_register(&self, register: Register) -> Byte {
         self.v[register]
     }
 
-    pub fn load_flag(&mut self, b: bool) {
+    fn load_flag(&mut self, b: bool) {
         if b {
             self.load_register(0xF, 0b0);    
         } else {
@@ -164,49 +167,49 @@ impl Cpu {
         }
     }
 
-    pub fn read_image_bytes(&self, n: usize) -> Vec<Byte> {
+    fn read_image_bytes(&self, n: usize) -> Vec<Byte> {
         let i = self.read_i();
         self.memory[i..i + n].to_vec()
     }
 
-    pub fn load_image_byte(&mut self, x: Address, y: Address, to_byte: Byte) -> bool {
+    fn load_image_byte(&mut self, x: Address, y: Address, to_byte: Byte) -> bool {
         let from_addr = DISPLAY_RANGE.start + y * graphics::SCREEN_WIDTH_SPRITES + x;
         let from_byte = self.memory[from_addr];
         self.memory[from_addr] = from_byte ^ to_byte;
         (from_byte & to_byte) > 0
     }
 
-    pub fn load_image_bytes(&mut self, to_bytes: Vec<Byte>) -> bool {
+    fn load_image_bytes(&mut self, to_bytes: Vec<Byte>) -> bool {
         let i = self.read_i();
         to_bytes.iter().any(|to_byte| {
             self.load_image_byte(i, 0, *to_byte)
         })
     }
 
-    pub fn read_delay_timer(&self) -> Byte {
+    fn read_delay_timer(&self) -> Byte {
         self.dt.current
     }
 
-    pub fn load_delay_timer(&mut self, val: Byte) {
+    fn load_delay_timer(&mut self, val: Byte) {
         self.dt.set(val);
     }
 
-    pub fn read_sound_timer(&mut self) -> Byte {
+    fn read_sound_timer(&mut self) -> Byte {
         self.st.current
     }
 
-    pub fn load_sound_timer(&mut self, val: Byte) {
+    fn load_sound_timer(&mut self, val: Byte) {
         self.st.set(val);
     }
 
-    pub fn stack_pop(&mut self) -> Address {
+    fn stack_pop(&mut self) -> Address {
         let current = self.sp.current;
         let addr = (self.memory[current] as Address) << 8 | (self.memory[current + 1] as Address);
         self.sp.move_backward();
         addr
     }
 
-    pub fn stack_push(&mut self) {
+    fn stack_push(&mut self) {
         self.sp.move_forward();
         let current = self.sp.current;
         let addr = self.pc.current;
@@ -214,7 +217,7 @@ impl Cpu {
         self.memory[current + 1] = (addr & 0x00FF) as Byte;
     }
 
-    pub fn clear_display_data(&mut self) {
+    fn clear_display_data(&mut self) {
         for addr in DISPLAY_RANGE {
             self.memory[addr] = 0x0;
         }

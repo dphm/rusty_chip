@@ -1,4 +1,4 @@
-use opcode::Opcode;
+use cpu::opcode::Opcode;
 
 pub trait Operation {
     fn no_op(&mut self, &Opcode);

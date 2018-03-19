@@ -2,10 +2,7 @@
 
 mod cpu;
 mod memory;
-mod opcode;
 mod output;
-mod pointer;
-mod timer;
 
 use std::io::{BufReader, Read};
 use std::fs::File;
@@ -32,6 +29,3 @@ fn read_bytes(file: &mut File) -> Vec<Byte> {
     buf_reader.read_to_end(&mut contents).expect("Unable to read file");
     contents
 }
-
-#[cfg(test)]
-mod tests;
