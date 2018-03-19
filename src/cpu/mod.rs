@@ -502,14 +502,12 @@ impl Operation for Cpu {
     }
 
     fn load_bcd_vx(&mut self, opcode: &Opcode) {
+        let i = self.read_i();
         let x = opcode.x();
         let vx = self.read_register(x);
-        let bytes = vec![
-            vx / 100,
-            vx % 100 / 10,
-            vx % 10
-        ];
-        self.load_image_bytes(bytes);
+        self.memory[i] = vx / 100;
+        self.memory[i + 1] = vx % 100 / 10;
+        self.memory[i + 2] = vx % 10;
         println!("\tLD BCD V{:x}: {:x} ({}) => {:?}", x, vx, vx, self.read_image_bytes(3));
     }
 
@@ -961,5 +959,138 @@ mod tests {
         op(&mut cpu, &opcode);
         assert_eq!(0b11111110, cpu.read_register(0x0));
         assert_eq!(0b0, cpu.read_register(0xF));        
+    }
+
+    #[test]
+    fn operation_9xy0_skip_not_equal_vx_vy() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        let pc = cpu.pc.current;
+        cpu.v[0x0] = 0x23;
+        cpu.v[0x1] = cpu.v[0x0];
+        let opcode = Opcode::new(0x9010);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(pc, cpu.pc.current);
+
+        cpu.v[0x1] = 0x22;
+
+        op(&mut cpu, &opcode);
+        assert_eq!(pc + 2, cpu.pc.current);
+    }
+
+    #[test]
+    fn operation_annn_load_i_addr() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        let opcode = Opcode::new(0xA456);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0x456, cpu.read_i());
+    }
+
+    #[ignore]
+    #[test]
+    fn operation_cxkk_rand_vx_byte() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        let opcode = Opcode::new(0xC00F);
+        let op = cpu.operation(&opcode);
+
+        for _ in 0..1000 {
+            op(&mut cpu, &opcode);
+            assert!(cpu.read_register(0x0) <= 0xF);
+        }
+    }
+
+    #[test]
+    fn operation_fx07_load_vx_dt() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        let time = 0x20;
+        cpu.dt.set(time);
+
+        let opcode = Opcode::new(0xF007);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(time, cpu.read_register(0x0));
+    }
+
+    #[test]
+    fn operation_fx15_load_dt_vx() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        let time = 0x20;
+        cpu.v[0x0] = time;
+        let opcode = Opcode::new(0xF015);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(time, cpu.read_delay_timer());
+    }
+
+    #[test]
+    fn operation_fx18_load_st_vx() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        let time = 0x20;
+        cpu.v[0x0] = time;
+        let opcode = Opcode::new(0xF018);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(time, cpu.read_sound_timer());
+    }
+
+    #[test]
+    fn operation_fx1e_add_i_vx() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        let i = cpu.read_i();
+        cpu.v[0x0] = 0x08;
+        let opcode = Opcode::new(0xF01E);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(i + 0x08, cpu.read_i());
+    }
+
+    #[test]
+    fn operation_fx29_load_i_vx_font() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.v[0x0] = 0x02;
+        let opcode = Opcode::new(0xF029);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(FONT_RANGE.start + 10, cpu.read_i());
+    }
+
+    #[test]
+    fn operation_fx33_load_bcd_vx() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        let i = cpu.read_i();
+        cpu.v[0x0] = 0xFE;
+        let opcode = Opcode::new(0xF033);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0x02, cpu.memory[i]);
+        assert_eq!(0x05, cpu.memory[i + 1]);
+        assert_eq!(0x04, cpu.memory[i + 2]);
     }
 }
