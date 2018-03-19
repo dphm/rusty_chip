@@ -363,9 +363,9 @@ impl Operation for Cpu {
         let x = opcode.x();
         let y = opcode.y();
         let vy = self.read_register(y);
-        let (result, overflow) = vy.overflowing_shr(1);
-        self.load_register(x, result);
-        self.load_flag(overflow);
+        let bit = vy % 2;
+        self.load_register(x, vy.wrapping_shr(1));
+        self.load_flag(bit == 1);
         println!("\tSHR V{:x}, V{:x}: {:x} => ({:x}, {})", x, y, vy, self.read_register(x), self.read_register(0xF));
     }
 
@@ -384,9 +384,9 @@ impl Operation for Cpu {
         let x = opcode.x();
         let y = opcode.y();
         let vy = self.read_register(y);
-        let (result, overflow) = vy.overflowing_shl(1);
-        self.load_register(x, result);
-        self.load_flag(overflow);
+        let bit = vy >> 7;
+        self.load_register(x, vy.wrapping_shl(1));
+        self.load_flag(bit == 1);
         println!("\tSHL V{:x}, V{:x}: {:x} => ({:x}, {})", x, y, vy, self.read_register(x), self.read_register(0xF));
     }
 
@@ -597,11 +597,10 @@ mod tests {
         let mut cpu = Cpu::new(&rom);
 
         let clone = cpu.clone();
-
         let opcode = Opcode::new(0x0000);
         let op = cpu.operation(&opcode);
-        op(&mut cpu, &opcode);
 
+        op(&mut cpu, &opcode);
         assert_eq!(clone, cpu);
     }
 
@@ -616,8 +615,8 @@ mod tests {
 
         let opcode = Opcode::new(0x00E0);
         let op = cpu.operation(&opcode);
-        op(&mut cpu, &opcode);
 
+        op(&mut cpu, &opcode);
         assert!(cpu.display_data().iter().all(|data| *data == false));
     }
 
@@ -631,11 +630,10 @@ mod tests {
         cpu.pc.move_forward();
         cpu.pc.move_forward();
         cpu.pc.move_forward();
-
         let opcode = Opcode::new(0x00EE);
         let op = cpu.operation(&opcode);
-        op(&mut cpu, &opcode);
 
+        op(&mut cpu, &opcode);
         assert_eq!(pc, cpu.pc.current);
     }
 
@@ -646,8 +644,8 @@ mod tests {
 
         let opcode = Opcode::new(0x1404);
         let op = cpu.operation(&opcode);
-        op(&mut cpu, &opcode);
 
+        op(&mut cpu, &opcode);
         assert_eq!(0x404, cpu.pc.current);
     }
 
@@ -658,8 +656,8 @@ mod tests {
 
         let opcode = Opcode::new(0x2404);
         let op = cpu.operation(&opcode);
-        op(&mut cpu, &opcode);
 
+        op(&mut cpu, &opcode);
         assert_eq!(0x404, cpu.pc.current);
         assert_eq!(0x02, cpu.memory[cpu.sp.current]);
         assert_eq!(0x00, cpu.memory[cpu.sp.current + 1]);
@@ -672,17 +670,16 @@ mod tests {
 
         let pc = cpu.pc.current;
         cpu.v[0x1] = 0x23;
-
         let opcode = Opcode::new(0x3122);
         let op = cpu.operation(&opcode);
-        op(&mut cpu, &opcode);
 
+        op(&mut cpu, &opcode);
         assert_eq!(pc, cpu.pc.current);
 
         let opcode = Opcode::new(0x3123);
         let op = cpu.operation(&opcode);
-        op(&mut cpu, &opcode);
 
+        op(&mut cpu, &opcode);
         assert_eq!(pc + 2, cpu.pc.current);
     }
 
@@ -693,17 +690,16 @@ mod tests {
 
         let pc = cpu.pc.current;
         cpu.v[0x1] = 0x23;
-
         let opcode = Opcode::new(0x4123);
         let op = cpu.operation(&opcode);
-        op(&mut cpu, &opcode);
 
+        op(&mut cpu, &opcode);
         assert_eq!(pc, cpu.pc.current);
 
         let opcode = Opcode::new(0x4122);
         let op = cpu.operation(&opcode);
-        op(&mut cpu, &opcode);
 
+        op(&mut cpu, &opcode);
         assert_eq!(pc + 2, cpu.pc.current);
     }
 
@@ -715,19 +711,15 @@ mod tests {
         let pc = cpu.pc.current;
         cpu.v[0x0] = 0x22;
         cpu.v[0x1] = 0x23;
-
         let opcode = Opcode::new(0x5010);
         let op = cpu.operation(&opcode);
-        op(&mut cpu, &opcode);
 
+        op(&mut cpu, &opcode);
         assert_eq!(pc, cpu.pc.current);
 
         cpu.v[0x1] = cpu.v[0x0];
 
-        let opcode = Opcode::new(0x5010);
-        let op = cpu.operation(&opcode);
         op(&mut cpu, &opcode);
-
         assert_eq!(pc + 2, cpu.pc.current);
     }
 
@@ -738,8 +730,8 @@ mod tests {
 
         let opcode = Opcode::new(0x6123);
         let op = cpu.operation(&opcode);
-        op(&mut cpu, &opcode);
 
+        op(&mut cpu, &opcode);
         assert_eq!(0x23, cpu.read_register(0x1));
     }
 
@@ -750,14 +742,14 @@ mod tests {
 
         let opcode = Opcode::new(0x71FF);
         let op = cpu.operation(&opcode);
-        op(&mut cpu, &opcode);
 
+        op(&mut cpu, &opcode);
         assert_eq!(0xFF, cpu.read_register(0x1));
 
         let opcode = Opcode::new(0x7102);
         let op = cpu.operation(&opcode);
-        op(&mut cpu, &opcode);
 
+        op(&mut cpu, &opcode);
         assert_eq!(0x01, cpu.read_register(0x1));
     }
 
@@ -767,12 +759,107 @@ mod tests {
         let mut cpu = Cpu::new(&rom);
 
         cpu.v[0x1] = 0x23;
-
         let opcode = Opcode::new(0x8010);
         let op = cpu.operation(&opcode);
-        op(&mut cpu, &opcode);
 
+        op(&mut cpu, &opcode);
         assert_eq!(0x23, cpu.read_register(0x0));
+    }
+
+    #[test]
+    fn operation_8xy1_or_vx_vy() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.v[0x0] = 0x0;
+        cpu.v[0x1] = 0x0;
+        let opcode = Opcode::new(0x8011);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0x0, cpu.read_register(0x0));
+
+        cpu.v[0x0] = 0x0;
+        cpu.v[0x1] = 0x1;
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0x1, cpu.read_register(0x0));
+
+        cpu.v[0x0] = 0x1;
+        cpu.v[0x1] = 0x0;
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0x1, cpu.read_register(0x0));
+
+        cpu.v[0x0] = 0x1;
+        cpu.v[0x1] = 0x1;
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0x1, cpu.read_register(0x0));
+    }
+
+    #[test]
+    fn operation_8xy2_and_vx_vy() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.v[0x0] = 0x0;
+        cpu.v[0x1] = 0x0;
+        let opcode = Opcode::new(0x8012);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0x0, cpu.read_register(0x0));
+
+        cpu.v[0x0] = 0x0;
+        cpu.v[0x1] = 0x1;
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0x0, cpu.read_register(0x0));
+
+        cpu.v[0x0] = 0x1;
+        cpu.v[0x1] = 0x0;
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0x0, cpu.read_register(0x0));
+
+        cpu.v[0x0] = 0x1;
+        cpu.v[0x1] = 0x1;
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0x1, cpu.read_register(0x0));
+    }
+
+    #[test]
+    fn operation_8xy3_xor_vx_vy() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.v[0x0] = 0x0;
+        cpu.v[0x1] = 0x0;
+        let opcode = Opcode::new(0x8013);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0x0, cpu.read_register(0x0));
+
+        cpu.v[0x0] = 0x0;
+        cpu.v[0x1] = 0x1;
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0x1, cpu.read_register(0x0));
+
+        cpu.v[0x0] = 0x1;
+        cpu.v[0x1] = 0x0;
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0x1, cpu.read_register(0x0));
+
+        cpu.v[0x0] = 0x1;
+        cpu.v[0x1] = 0x1;
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0x0, cpu.read_register(0x0));
     }
 
     #[test]
@@ -782,12 +869,97 @@ mod tests {
 
         cpu.v[0x0] = 0xFF;
         cpu.v[0x1] = 0x02;
-
         let opcode = Opcode::new(0x8014);
         let op = cpu.operation(&opcode);
-        op(&mut cpu, &opcode);
 
+        op(&mut cpu, &opcode);
         assert_eq!(0x01, cpu.read_register(0x0));
         assert_eq!(0b1, cpu.read_register(0xF));
+
+        
+        op(&mut cpu, &opcode);
+        assert_eq!(0x03, cpu.read_register(0x0));
+        assert_eq!(0b0, cpu.read_register(0xF));
+    }
+
+    #[test]
+    fn operation_8xy5_sub_vx_vy() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.v[0x0] = 0x01;
+        cpu.v[0x1] = 0x02;
+        let opcode = Opcode::new(0x8015);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0xFF, cpu.read_register(0x0));
+        assert_eq!(0b0, cpu.read_register(0xF));
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0xFD, cpu.read_register(0x0));
+        assert_eq!(0b1, cpu.read_register(0xF));
+    }
+
+    #[test]
+    fn operation_8xy6_shr_vx_vy() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.v[0x1] = 0b11111111;
+        let opcode = Opcode::new(0x8016);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0b01111111, cpu.read_register(0x0));
+        assert_eq!(0b1, cpu.read_register(0xF));
+
+        cpu.v[0x1] = 0b11111110;
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0b01111111, cpu.read_register(0x0));
+        assert_eq!(0b0, cpu.read_register(0xF));        
+    }
+
+    #[test]
+    fn operation_8xy7_subn_vx_vy() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.v[0x0] = 0x02;
+        cpu.v[0x1] = 0x01;
+        let opcode = Opcode::new(0x8017);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0xFF, cpu.read_register(0x0));
+        assert_eq!(0b0, cpu.read_register(0xF));
+
+        cpu.v[0x0] = 0x02;
+        cpu.v[0x1] = 0xFF;
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0xFD, cpu.read_register(0x0));
+        assert_eq!(0b1, cpu.read_register(0xF));
+    }
+
+    #[test]
+    fn operation_8xye_shl_vx_vy() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.v[0x1] = 0b11111111;
+        let opcode = Opcode::new(0x801E);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0b11111110, cpu.read_register(0x0));
+        assert_eq!(0b1, cpu.read_register(0xF));
+
+        cpu.v[0x1] = 0b01111111;
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0b11111110, cpu.read_register(0x0));
+        assert_eq!(0b0, cpu.read_register(0xF));        
     }
 }
