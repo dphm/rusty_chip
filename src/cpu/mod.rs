@@ -161,9 +161,9 @@ impl Cpu {
 
     fn load_flag(&mut self, b: bool) {
         if b {
-            self.load_register(0xF, 0b0);    
-        } else {
             self.load_register(0xF, 0b1);
+        } else {
+            self.load_register(0xF, 0b0);
         }
     }
 
@@ -705,5 +705,89 @@ mod tests {
         op(&mut cpu, &opcode);
 
         assert_eq!(pc + 2, cpu.pc.current);
+    }
+
+    #[test]
+    fn operation_5xy0_skip_not_equal_vx_byte() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        let pc = cpu.pc.current;
+        cpu.v[0x0] = 0x22;
+        cpu.v[0x1] = 0x23;
+
+        let opcode = Opcode::new(0x5010);
+        let op = cpu.operation(&opcode);
+        op(&mut cpu, &opcode);
+
+        assert_eq!(pc, cpu.pc.current);
+
+        cpu.v[0x1] = cpu.v[0x0];
+
+        let opcode = Opcode::new(0x5010);
+        let op = cpu.operation(&opcode);
+        op(&mut cpu, &opcode);
+
+        assert_eq!(pc + 2, cpu.pc.current);
+    }
+
+    #[test]
+    fn operation_6xkk_load_vx_byte() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        let opcode = Opcode::new(0x6123);
+        let op = cpu.operation(&opcode);
+        op(&mut cpu, &opcode);
+
+        assert_eq!(0x23, cpu.read_register(0x1));
+    }
+
+    #[test]
+    fn operation_7xkk_add_vx_byte() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        let opcode = Opcode::new(0x71FF);
+        let op = cpu.operation(&opcode);
+        op(&mut cpu, &opcode);
+
+        assert_eq!(0xFF, cpu.read_register(0x1));
+
+        let opcode = Opcode::new(0x7102);
+        let op = cpu.operation(&opcode);
+        op(&mut cpu, &opcode);
+
+        assert_eq!(0x01, cpu.read_register(0x1));
+    }
+
+    #[test]
+    fn operation_8xy0_load_vx_vy() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.v[0x1] = 0x23;
+
+        let opcode = Opcode::new(0x8010);
+        let op = cpu.operation(&opcode);
+        op(&mut cpu, &opcode);
+
+        assert_eq!(0x23, cpu.read_register(0x0));
+    }
+
+    #[test]
+    fn operation_8xy4_add_vx_vy() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.v[0x0] = 0xFF;
+        cpu.v[0x1] = 0x02;
+
+        let opcode = Opcode::new(0x8014);
+        let op = cpu.operation(&opcode);
+        op(&mut cpu, &opcode);
+
+        assert_eq!(0x01, cpu.read_register(0x0));
+        assert_eq!(0b1, cpu.read_register(0xF));
     }
 }
