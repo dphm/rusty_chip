@@ -48,7 +48,7 @@ impl Cpu {
             exit: false,
             pc: Pointer::new(ROM_RANGE),
             sp: Pointer::new(STACK_RANGE),
-            i: Pointer::new(FONT_RANGE.start..ROM_RANGE.end),
+            i: Pointer::new(FONT_RANGE.start..DISPLAY_RANGE.end),
             dt: Timer::new(60),
             st: Timer::new(60),
             v: [0x0; NUM_REGISTERS],
@@ -172,8 +172,7 @@ impl Cpu {
         self.memory[i..i + n].to_vec()
     }
 
-    fn load_image_byte(&mut self, x: Address, y: Address, to_byte: Byte) -> bool {
-        let from_addr = DISPLAY_RANGE.start + y * graphics::SCREEN_WIDTH_SPRITES + x;
+    fn load_image_byte(&mut self, from_addr: Address, to_byte: Byte) -> bool {
         let from_byte = self.memory[from_addr];
         self.memory[from_addr] = from_byte ^ to_byte;
         (from_byte & to_byte) > 0
@@ -181,8 +180,9 @@ impl Cpu {
 
     fn load_image_bytes(&mut self, to_bytes: Vec<Byte>) -> bool {
         let i = self.read_i();
-        to_bytes.iter().any(|to_byte| {
-            self.load_image_byte(i, 0, *to_byte)
+        to_bytes.iter().enumerate().any(|(b, to_byte)| {
+            let from_addr = i + b;
+            self.load_image_byte(from_addr, *to_byte)
         })
     }
 
@@ -433,19 +433,26 @@ impl Operation for Cpu {
 
         for sprite_y in 0..n {
             let byte_y = (vy + sprite_y) % graphics::SCREEN_HEIGHT;
+            let offset_y = DISPLAY_RANGE.start + byte_y * graphics::SCREEN_WIDTH_SPRITES;
             let sprite_byte = sprite_bytes[sprite_y];
             let mut collision = match pixel_x {
-                0 => self.load_image_byte(byte_x, byte_y, sprite_byte),
+                0 => {
+                    let from_addr = offset_y + byte_x;
+                    self.load_image_byte(from_addr, sprite_byte)
+                },
                 _ => {
                     let shift_r = pixel_x as u32;
-                    let left = sprite_byte.wrapping_shr(shift_r);
+                    let left = sprite_byte.wrapping_shr(shift_r) & 0xFFu8.wrapping_shr(shift_r);
+                    let left_addr = offset_y + byte_x;
 
                     let shift_l = (graphics::SPRITE_WIDTH - pixel_x) as u32;
-                    let right = sprite_byte.wrapping_shl(shift_l);
+                    let right = sprite_byte.wrapping_shl(shift_l) & 0xFFu8.wrapping_shl(shift_l);
                     let right_x = (byte_x + 1) % graphics::SCREEN_WIDTH_SPRITES;
+                    let right_addr = offset_y + right_x;
 
-                    self.load_image_byte(byte_x, byte_y, left) &
-                        self.load_image_byte(right_x, byte_y, right)
+
+                    self.load_image_byte(left_addr, left) &
+                        self.load_image_byte(right_addr, right)
                 }
             };
 
@@ -505,7 +512,7 @@ impl Operation for Cpu {
         let i = self.read_i();
         let x = opcode.x();
         let vx = self.read_register(x);
-        self.memory[i] = vx / 100;
+        self.memory[i + 0] = vx / 100;
         self.memory[i + 1] = vx % 100 / 10;
         self.memory[i + 2] = vx % 10;
         println!("\tLD BCD V{:x}: {:x} ({}) => {:?}", x, vx, vx, self.read_image_bytes(3));
@@ -993,6 +1000,20 @@ mod tests {
         assert_eq!(0x456, cpu.read_i());
     }
 
+    #[test]
+    fn operation_bnnn_jump_v0_addr() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.v[0x0] = 0x08;
+
+        let opcode = Opcode::new(0xB300);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0x308, cpu.pc.current);
+    }
+
     #[ignore]
     #[test]
     fn operation_cxkk_rand_vx_byte() {
@@ -1006,6 +1027,180 @@ mod tests {
             op(&mut cpu, &opcode);
             assert!(cpu.read_register(0x0) <= 0xF);
         }
+    }
+
+    #[test]
+    fn operation_dxyn_draw_vx_vy_n() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.load_i(ROM_RANGE.start);
+        let i = cpu.read_i();
+        cpu.v[0] = 8;
+        cpu.v[1] = 5;
+        cpu.memory[i + 0] = 0b10011001;
+        cpu.memory[i + 1] = 0b11111111;
+
+        let opcode = Opcode::new(0xD012);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        let addr_0 = DISPLAY_RANGE.start + 5 * 8 + 1;
+        let addr_1 = DISPLAY_RANGE.start + 6 * 8 + 1;
+        assert_eq!(0b10011001, cpu.memory[addr_0]);
+        assert_eq!(0b11111111, cpu.memory[addr_1]);
+        assert_eq!(0b0, cpu.read_register(0xF));
+    }
+
+    #[test]
+    fn operation_dxyn_draw_vx_vy_n_collision() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.load_i(ROM_RANGE.start);
+        let i = cpu.read_i();
+        cpu.v[0] = 8;
+        cpu.v[1] = 5;
+        cpu.memory[i + 0] = 0b00000001;
+        cpu.memory[i + 1] = 0b11111111;
+
+        let addr_0 = DISPLAY_RANGE.start + 5 * 8 + 1;
+        let addr_1 = DISPLAY_RANGE.start + 6 * 8 + 1;
+        cpu.memory[addr_0] = 0b10000000;
+        cpu.memory[addr_1] = 0b00000000;
+
+        let opcode = Opcode::new(0xD012);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0b10000001, cpu.memory[addr_0]);
+        assert_eq!(0b11111111, cpu.memory[addr_1]);
+        assert_eq!(0b0, cpu.read_register(0xF));
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0b10000000, cpu.memory[addr_0]);
+        assert_eq!(0b00000000, cpu.memory[addr_1]);
+        assert_eq!(0b1, cpu.read_register(0xF));
+    }
+
+    #[test]
+    fn operation_dxyn_draw_vx_vy_n_with_vx_offset() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.load_i(ROM_RANGE.start);
+        let i = cpu.read_i();
+        cpu.v[0] = 2;
+        cpu.v[1] = 5;
+        cpu.memory[i + 0] = 0b10011001;
+        cpu.memory[i + 1] = 0b11111111;
+
+        let opcode = Opcode::new(0xD012);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        let addr_0 = DISPLAY_RANGE.start + 5 * 8;
+        let addr_1 = DISPLAY_RANGE.start + 6 * 8;
+        assert_eq!((0b00100110, 0b01000000), (cpu.memory[addr_0], cpu.memory[addr_0 + 1]));
+        assert_eq!((0b00111111, 0b11000000), (cpu.memory[addr_1], cpu.memory[addr_1 + 1]));
+        assert_eq!(0b0, cpu.read_register(0xF));
+    }
+
+    #[test]
+    fn operation_dxyn_draw_vx_vy_n_with_vx_offset_collision() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.load_i(ROM_RANGE.start);
+        let i = cpu.read_i();
+        cpu.v[0] = 2;
+        cpu.v[1] = 5;
+        cpu.memory[i + 0] = 0b10011001;
+        cpu.memory[i + 1] = 0b11111111;
+
+        let opcode = Opcode::new(0xD012);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        let addr_0 = DISPLAY_RANGE.start + 5 * 8;
+        let addr_1 = DISPLAY_RANGE.start + 6 * 8;
+        assert_eq!((0b00100110, 0b01000000), (cpu.memory[addr_0], cpu.memory[addr_0 + 1]));
+        assert_eq!((0b00111111, 0b11000000), (cpu.memory[addr_1], cpu.memory[addr_1 + 1]));
+        assert_eq!(0b0, cpu.read_register(0xF));
+
+        op(&mut cpu, &opcode);
+        assert_eq!((0b0, 0b0), (cpu.memory[addr_0], cpu.memory[addr_0 + 1]));
+        assert_eq!((0b0, 0b0), (cpu.memory[addr_1], cpu.memory[addr_1 + 1]));
+        assert_eq!(0b1, cpu.read_register(0xF));
+    }
+
+    #[test]
+    fn operation_dxyn_draw_vx_vy_n_with_vx_wrap() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.load_i(ROM_RANGE.start);
+        let i = cpu.read_i();
+        cpu.v[0] = 64;
+        cpu.v[1] = 5;
+        cpu.memory[i + 0] = 0b10011001;
+        cpu.memory[i + 1] = 0b11111111;
+
+        let opcode = Opcode::new(0xD012);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        let addr_0 = DISPLAY_RANGE.start + 5 * 8;
+        let addr_1 = DISPLAY_RANGE.start + 6 * 8;
+        assert_eq!(0b10011001, cpu.memory[addr_0]);
+        assert_eq!(0b11111111, cpu.memory[addr_1]);
+        assert_eq!(0b0, cpu.read_register(0xF));
+    }
+
+    #[test]
+    fn operation_dxyn_draw_vx_vy_n_with_vx_wrap_offset() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.load_i(ROM_RANGE.start);
+        let i = cpu.read_i();
+        cpu.v[0] = 66;
+        cpu.v[1] = 5;
+        cpu.memory[i + 0] = 0b10011001;
+        cpu.memory[i + 1] = 0b11111111;
+
+        let opcode = Opcode::new(0xD012);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        let addr_0 = DISPLAY_RANGE.start + 5 * 8;
+        let addr_1 = DISPLAY_RANGE.start + 6 * 8;
+        assert_eq!((0b00100110, 0b01000000), (cpu.memory[addr_0], cpu.memory[addr_0 + 1]));
+        assert_eq!((0b00111111, 0b11000000), (cpu.memory[addr_1], cpu.memory[addr_1 + 1]));
+        assert_eq!(0b0, cpu.read_register(0xF));
+    }
+
+    #[test]
+    fn operation_dxyn_draw_vx_vy_n_with_vy_wrap() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.load_i(ROM_RANGE.start);
+        let i = cpu.read_i();
+        cpu.v[0] = 8;
+        cpu.v[1] = 31;
+        cpu.memory[i + 0] = 0b10011001;
+        cpu.memory[i + 1] = 0b11111111;
+
+        let opcode = Opcode::new(0xD012);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        let addr_0 = DISPLAY_RANGE.start + 31 * 8 + 1;
+        let addr_1 = DISPLAY_RANGE.start + 0 * 8 + 1;
+        assert_eq!(0b10011001, cpu.memory[addr_0]);
+        assert_eq!(0b11111111, cpu.memory[addr_1]);
+        assert_eq!(0b0, cpu.read_register(0xF));
     }
 
     #[test]
@@ -1089,8 +1284,62 @@ mod tests {
         let op = cpu.operation(&opcode);
 
         op(&mut cpu, &opcode);
-        assert_eq!(0x02, cpu.memory[i]);
+        assert_eq!(0x02, cpu.memory[i + 0]);
         assert_eq!(0x05, cpu.memory[i + 1]);
         assert_eq!(0x04, cpu.memory[i + 2]);
+    }
+
+    #[test]
+    fn operation_fx55_load_through_vx() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.load_i(ROM_RANGE.start);
+        let i = cpu.read_i();
+        cpu.v[0] = 0xFF;
+        cpu.v[1] = 0xEE;
+        cpu.v[2] = 0xDD;
+        cpu.v[3] = 0xCC;
+        cpu.v[4] = 0xBB;
+        cpu.v[5] = 0xAA;
+
+        let opcode = Opcode::new(0xF555);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0xFF, cpu.memory[i + 0]);
+        assert_eq!(0xEE, cpu.memory[i + 1]);
+        assert_eq!(0xDD, cpu.memory[i + 2]);
+        assert_eq!(0xCC, cpu.memory[i + 3]);
+        assert_eq!(0xBB, cpu.memory[i + 4]);
+        assert_eq!(0xAA, cpu.memory[i + 5]);
+        assert_eq!(i + 6, cpu.read_i());
+    }
+
+    #[test]
+    fn operation_fx65_read_through_vx() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.load_i(ROM_RANGE.start);
+        let i = cpu.read_i();
+        cpu.memory[i + 0] = 0xFF;
+        cpu.memory[i + 1] = 0xEE;
+        cpu.memory[i + 2] = 0xDD;
+        cpu.memory[i + 3] = 0xCC;
+        cpu.memory[i + 4] = 0xBB;
+        cpu.memory[i + 5] = 0xAA;
+
+        let opcode = Opcode::new(0xF565);
+        let op = cpu.operation(&opcode);
+
+        op(&mut cpu, &opcode);
+        assert_eq!(0xFF, cpu.read_register(0x0));
+        assert_eq!(0xEE, cpu.read_register(0x1));
+        assert_eq!(0xDD, cpu.read_register(0x2));
+        assert_eq!(0xCC, cpu.read_register(0x3));
+        assert_eq!(0xBB, cpu.read_register(0x4));
+        assert_eq!(0xAA, cpu.read_register(0x5));
+        assert_eq!(i + 6, cpu.read_i());
     }
 }
