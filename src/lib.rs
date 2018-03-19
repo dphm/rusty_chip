@@ -3,7 +3,6 @@
 mod cpu;
 mod memory;
 mod opcode;
-mod ops;
 mod output;
 mod pointer;
 mod timer;
