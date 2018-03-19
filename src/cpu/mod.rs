@@ -592,8 +592,8 @@ mod tests {
     }
 
     #[test]
-    fn operation_0000() {
-        let rom = vec![0xAB, 0xCD, 0xEF, 0xFF];
+    fn operation_0000_no_op() {
+        let rom = Vec::new();
         let mut cpu = Cpu::new(&rom);
 
         let clone = cpu.clone();
@@ -603,5 +603,107 @@ mod tests {
         op(&mut cpu, &opcode);
 
         assert_eq!(clone, cpu);
+    }
+
+    #[test]
+    fn operation_00e0_clear_display() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        for i in DISPLAY_RANGE {
+            cpu.memory[i] = 0xFF;
+        }
+
+        let opcode = Opcode::new(0x00E0);
+        let op = cpu.operation(&opcode);
+        op(&mut cpu, &opcode);
+
+        assert!(cpu.display_data().iter().all(|data| *data == false));
+    }
+
+    #[test]
+    fn operation_00ee_return_from_subroutine() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        let pc = cpu.pc.current;
+        cpu.stack_push();
+        cpu.pc.move_forward();
+        cpu.pc.move_forward();
+        cpu.pc.move_forward();
+
+        let opcode = Opcode::new(0x00EE);
+        let op = cpu.operation(&opcode);
+        op(&mut cpu, &opcode);
+
+        assert_eq!(pc, cpu.pc.current);
+    }
+
+    #[test]
+    fn operation_1nnn_jump_addr() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        let opcode = Opcode::new(0x1404);
+        let op = cpu.operation(&opcode);
+        op(&mut cpu, &opcode);
+
+        assert_eq!(0x404, cpu.pc.current);
+    }
+
+    #[test]
+    fn operation_2nnn_call_subroutine() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        let opcode = Opcode::new(0x2404);
+        let op = cpu.operation(&opcode);
+        op(&mut cpu, &opcode);
+
+        assert_eq!(0x404, cpu.pc.current);
+        assert_eq!(0x02, cpu.memory[cpu.sp.current]);
+        assert_eq!(0x00, cpu.memory[cpu.sp.current + 1]);
+    }
+
+    #[test]
+    fn operation_3xkk_skip_equal_vx_byte() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        let pc = cpu.pc.current;
+        cpu.v[0x1] = 0x23;
+
+        let opcode = Opcode::new(0x3122);
+        let op = cpu.operation(&opcode);
+        op(&mut cpu, &opcode);
+
+        assert_eq!(pc, cpu.pc.current);
+
+        let opcode = Opcode::new(0x3123);
+        let op = cpu.operation(&opcode);
+        op(&mut cpu, &opcode);
+
+        assert_eq!(pc + 2, cpu.pc.current);
+    }
+
+    #[test]
+    fn operation_4xkk_skip_not_equal_vx_byte() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        let pc = cpu.pc.current;
+        cpu.v[0x1] = 0x23;
+
+        let opcode = Opcode::new(0x4123);
+        let op = cpu.operation(&opcode);
+        op(&mut cpu, &opcode);
+
+        assert_eq!(pc, cpu.pc.current);
+
+        let opcode = Opcode::new(0x4122);
+        let op = cpu.operation(&opcode);
+        op(&mut cpu, &opcode);
+
+        assert_eq!(pc + 2, cpu.pc.current);
     }
 }
