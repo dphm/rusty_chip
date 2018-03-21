@@ -2,6 +2,8 @@
 
 CHIP-8 emulator in Rust
 
+![CHIP-8 Logo in ASCII](/chip8.png)
+
 ## Resources
 
 - [Cowgod's Chip-8 Technical Reference v1.0](http://devernay.free.fr/hacks/chip8/C8TECH10.HTM)
