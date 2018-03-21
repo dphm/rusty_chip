@@ -20,27 +20,13 @@ impl Pointer {
     }
 
     pub fn move_forward(&mut self) {
-        let next = self.current + self.step_size;
-        if next >= self.range.end {
-            panic!(
-                "Pointer value greater than pointer range ({:x}..{:x})",
-                self.range.start, self.range.end
-            );
-        } else {
-            self.current = next;
-        }
+        let next = self.next();
+        self.set(next);
     }
 
     pub fn move_backward(&mut self) {
-        let prev = self.current - self.step_size;
-        if prev < self.range.start {
-            panic!(
-                "Pointer value less than pointer range ({:x}..{:x})",
-                self.range.start, self.range.end
-            );
-        } else {
-            self.current = prev;
-        }
+        let prev = self.prev();
+        self.set(prev);
     }
 
     pub fn set(&mut self, addr: Address) {
@@ -52,6 +38,14 @@ impl Pointer {
         } else {
             self.current = addr;
         }
+    }
+
+    fn next(&self) -> Address {
+        self.current + self.step_size
+    }
+
+    fn prev(&self) -> Address {
+        self.current - self.step_size
     }
 }
 
@@ -82,9 +76,6 @@ mod tests {
 
         p.move_forward();
         assert_eq!(TEST_RANGE.start + 2, p.current);
-
-        p.move_forward();
-        assert_eq!(TEST_RANGE.start + 4, p.current);
     }
 
     #[test]
@@ -94,9 +85,6 @@ mod tests {
 
         p.move_backward();
         assert_eq!(TEST_RANGE.end - 2, p.current);
-
-        p.move_backward();
-        assert_eq!(TEST_RANGE.end - 4, p.current);
     }
 
     #[test]
