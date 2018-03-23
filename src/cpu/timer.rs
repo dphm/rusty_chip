@@ -21,12 +21,14 @@ impl Timer {
     }
 
     pub fn tick(&mut self) {
+        if !self.active() { return; }
+
         let duration_passed = Instant::now().duration_since(self.last_set);
-        if duration_passed >= self.interval {
-            let intervals_passed = (duration_passed.subsec_nanos() / self.interval.subsec_nanos()) as u8;
-            let updated = self.current.saturating_sub(intervals_passed);
-            self.set(updated);
-        }
+        if duration_passed < self.interval { return; }
+
+        let intervals_passed = (duration_passed.subsec_nanos() / self.interval.subsec_nanos()) as u8;
+        let updated = self.current.saturating_sub(intervals_passed);
+        self.set(updated);
     }
 
     pub fn set(&mut self, value: u8) {
