@@ -29,6 +29,7 @@ type Register = usize;
 #[derive(Debug, PartialEq)]
 pub struct Cpu {
     pub exit: bool,
+    pub beep: bool,
     pc: Pointer,
     sp: Pointer,
     i: Pointer,
@@ -46,6 +47,7 @@ impl Cpu {
 
         Cpu {
             exit: false,
+            beep: true,
             pc: Pointer::new(ROM_RANGE),
             sp: Pointer::new(STACK_RANGE),
             i: Pointer::new(FONT_RANGE.start..DISPLAY_RANGE.end),
@@ -62,8 +64,7 @@ impl Cpu {
         println!("[#{:x}] {}", self.pc.current, opcode);
         op(self, &opcode);
 
-        self.dt.tick();
-        self.st.tick();
+        self.update_timers();
     }
 
     pub fn fetch_opcode(&self) -> Opcode {
@@ -194,6 +195,12 @@ impl Cpu {
 
     fn load_sound_timer(&mut self, val: Byte) {
         self.st.set(val);
+    }
+
+    fn update_timers(&mut self) {
+        self.dt.tick();
+        self.st.tick();
+        self.beep = self.st.active();
     }
 
     fn stack_pop(&mut self) -> Address {
@@ -1592,5 +1599,22 @@ mod tests {
         assert_eq!(0xAA, cpu.read_register(0x5));
         assert_eq!(i + 6, cpu.read_i());
         assert_eq!(pc + 2, cpu.pc.current);
+    }
+
+    #[test]
+    fn beep_while_sound_timer_active() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+
+        cpu.update_timers();
+
+        assert!(cpu.st.active());
+        assert!(cpu.beep);
+
+        cpu.st.set(0);
+        cpu.update_timers();
+
+        assert!(!cpu.st.active());
+        assert!(!cpu.beep);
     }
 }
