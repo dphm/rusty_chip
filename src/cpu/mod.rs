@@ -267,6 +267,12 @@ impl Operation for Cpu {
 
     fn jump_addr(&mut self, opcode: &Opcode) {
         let addr = opcode.nnn();
+
+        if self.pc.current == addr {
+            self.exit = true;
+            return;
+        }
+
         self.pc.set(addr);
         println!("\tJP {:x}", addr);
     }
