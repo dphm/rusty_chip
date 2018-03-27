@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <link rel="stylesheet" type="text/css" href="styles.css">
+    <title>CHIP-8</title>
+  </head>
+  <body>
+    <header>
+      <h1>CHIP-8</h1>
+    </header>
+    <main>
+      <div class="container" role="presentation">
+        <canvas id="screen"></canvas>
+        <section id="controls">
+          <h1>Controls</h1>
+
+          <h2>Audio</h2>
+          <button id="mute" aria-labelledby="mute audio">
+            <span class="muted" role="img" aria-label="audio muted" tabindex="-1">&#x1F507;</span>
+            <span class="unmuted" role="img" aria-label="audio unmuted" tabindex="-1" hidden>&#x1F50A;</span>
+          </button>
+        </section>
+      </div>
+    </main>
+    <footer>
+      <nav>
+        <a href="https://github.com/quelledanielle/rusty_chip">GitHub</a>
+      </nav>
+    </footer>
+    <script src="chip8.js"></script>
+  </body>
+</html>
