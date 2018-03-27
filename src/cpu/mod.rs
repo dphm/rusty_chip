@@ -14,7 +14,6 @@ mod timer;
 
 use self::rand::Rng;
 use std::ops::Range;
-use std::fmt::{self, Display};
 
 use cpu::ops::Operation;
 use cpu::opcode::Opcode;
@@ -27,7 +26,7 @@ use {Address, Byte};
 type Register = usize;
 
 #[derive(Debug, PartialEq)]
-pub struct Cpu {
+pub struct Cpu<'a, G: 'a> where G: graphics::GraphicsOutput {
     pub exit: bool,
     pub beep: bool,
     pub draw: bool,
@@ -37,11 +36,12 @@ pub struct Cpu {
     dt: Timer,
     st: Timer,
     v: [Byte; NUM_REGISTERS],
-    memory: Memory
+    memory: Memory,
+    graphics: &'a G
 }
 
-impl Cpu {
-    pub fn new(rom: &Vec<Byte>) -> Cpu {
+impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
+    pub fn new(rom: &Vec<Byte>, graphics: &'a G) -> Cpu<'a, G> {
         let mut memory = Memory::new();
         memory.load(&font::FONT_SET, FONT_RANGE);
         memory.load(&rom, ROM_RANGE);
@@ -56,14 +56,16 @@ impl Cpu {
             dt: Timer::new(60, 60),
             st: Timer::new(60, 60),
             v: [0x0; NUM_REGISTERS],
-            memory: memory
+            memory,
+            graphics
         }
     }
 
     pub fn step(&mut self) {
+        self.draw = false;
+
         let opcode = self.fetch_opcode();
         let op = self.operation(&opcode);
-        println!("[#{:x}] {}", self.pc.current, opcode);
         op(self, &opcode);
 
         self.update_timers();
@@ -75,7 +77,7 @@ impl Cpu {
         Opcode::from_bytes(bytes)
     }
 
-    pub fn operation(&mut self, opcode: &Opcode) -> fn(&mut Cpu, &Opcode) {
+    pub fn operation(&mut self, opcode: &Opcode) -> fn(&mut Cpu<'a, G>, &Opcode) {
         match opcode.first_hex_digit() {
             0x0 => {
                 match opcode.kk() {
@@ -243,7 +245,7 @@ impl Cpu {
     }
 }
 
-impl Operation for Cpu {
+impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
     fn no_op(&mut self, _opcode: &Opcode) {
         self.pc.move_forward();
     }
@@ -496,11 +498,6 @@ impl Operation for Cpu {
         self.pc.move_forward();
 
         println!("\tDRW V{:x}: {:x}, V{:x}: {:x}, {:?}", x, vx, y, vy, sprite_bytes);
-        print!("   ");
-        for i in 0..graphics::SCREEN_WIDTH_SPRITES {
-            print!("{}               ", i);
-        }
-        println!("{}", self);
     }
 
     fn skip_key_pressed_vx(&mut self, _opcode: &Opcode) {}
@@ -584,26 +581,6 @@ impl Operation for Cpu {
 
         let register_bytes: Vec<Byte> = (0..x + 1).map(|r| self.read_register(r)).collect();
         println!("\tRD V{:x} [{:?}], [I] => {:?}", x, self.read_image_bytes(x + 1), register_bytes);
-    }
-}
-
-impl Display for Cpu {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let lines = self.display_data().iter().enumerate()
-            .fold(String::new(), |mut acc, (i, bit)| {
-                if (i % graphics::SCREEN_WIDTH) == 0 {
-                    acc.push_str(&format!("\n{:02} ", i / 64));
-                }
-
-                let c = match *bit {
-                    true => "  ",
-                    false => "▓▓︎"
-                };
-
-                acc.push_str(c);
-                acc
-            });
-        write!(f, "{}", lines)
     }
 }
 

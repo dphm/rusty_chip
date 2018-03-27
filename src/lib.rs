@@ -2,7 +2,7 @@
 
 mod cpu;
 mod memory;
-mod output;
+pub mod output;
 
 use std::io::{BufReader, Read};
 use std::fs::File;
@@ -13,8 +13,9 @@ use cpu::Cpu;
 type Byte = u8;
 type Address = usize;
 
-pub fn init_cpu(rom: Vec<Byte>) -> Cpu {
-    Cpu::new(&rom)
+pub fn init_cpu<'a, G: 'a>(rom: &Vec<Byte>, graphics: &'a G) -> Cpu<'a, G>
+    where G: output::graphics::GraphicsOutput {
+    Cpu::new(&rom, &graphics)
 }
 
 pub fn load_rom(directory: &str, filename: &str) -> Vec<Byte> {
