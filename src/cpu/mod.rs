@@ -30,6 +30,7 @@ type Register = usize;
 pub struct Cpu {
     pub exit: bool,
     pub beep: bool,
+    pub draw: bool,
     pc: Pointer,
     sp: Pointer,
     i: Pointer,
@@ -48,6 +49,7 @@ impl Cpu {
         Cpu {
             exit: false,
             beep: true,
+            draw: false,
             pc: Pointer::new(ROM_RANGE),
             sp: Pointer::new(STACK_RANGE),
             i: Pointer::new(FONT_RANGE.start..DISPLAY_RANGE.end),
@@ -169,7 +171,11 @@ impl Cpu {
 
     fn load_image_byte(&mut self, from_addr: Address, to_byte: Byte) -> bool {
         let from_byte = self.memory[from_addr];
-        self.memory[from_addr] = from_byte ^ to_byte;
+        let new_byte = from_byte ^ to_byte;
+        if new_byte != from_byte {
+            self.memory[from_addr] = new_byte;
+            self.draw = true;
+        }
         (from_byte & to_byte) > 0
     }
 
@@ -453,14 +459,15 @@ impl Operation for Cpu {
         let byte_x = (vx / graphics::SCREEN_WIDTH_SPRITES) % graphics::SCREEN_WIDTH_SPRITES;
         let pixel_x = vx % graphics::SPRITE_WIDTH;
 
+        let mut collision = false;
         for sprite_y in 0..n {
             let byte_y = (vy + sprite_y) % graphics::SCREEN_HEIGHT;
             let offset_y = DISPLAY_RANGE.start + byte_y * graphics::SCREEN_WIDTH_SPRITES;
             let sprite_byte = sprite_bytes[sprite_y];
-            let mut collision = match pixel_x {
+            match pixel_x {
                 0 => {
                     let from_addr = offset_y + byte_x;
-                    self.load_image_byte(from_addr, sprite_byte)
+                    collision = collision | self.load_image_byte(from_addr, sprite_byte);
                 },
                 _ => {
                     let shift_r = pixel_x as u32;
@@ -472,15 +479,14 @@ impl Operation for Cpu {
                     let right_x = (byte_x + 1) % graphics::SCREEN_WIDTH_SPRITES;
                     let right_addr = offset_y + right_x;
 
-
-                    self.load_image_byte(left_addr, left) &
-                        self.load_image_byte(right_addr, right)
+                    collision = collision
+                        | self.load_image_byte(left_addr, left)
+                        | self.load_image_byte(right_addr, right);
                 }
             };
-
-            self.load_flag(collision);
         }
 
+        self.load_flag(collision);
         self.pc.move_forward();
 
         println!("\tDRW V{:x}: {:x}, V{:x}: {:x}, {:?}", x, vx, y, vy, sprite_bytes);
@@ -1294,6 +1300,7 @@ mod tests {
         assert_eq!(0b11111111, cpu.memory[addr_1]);
         assert_eq!(0b0, cpu.read_register(0xF));
         assert_eq!(pc + 2, cpu.pc.current);
+        assert!(cpu.draw);
     }
 
     #[test]
@@ -1321,6 +1328,7 @@ mod tests {
         assert_eq!(0b00000000, cpu.memory[addr_1]);
         assert_eq!(0b1, cpu.read_register(0xF));
         assert_eq!(pc + 2, cpu.pc.current);
+        assert!(cpu.draw)
     }
 
     #[test]
@@ -1345,6 +1353,7 @@ mod tests {
         assert_eq!((0b00111111, 0b11000000), (cpu.memory[addr_1], cpu.memory[addr_1 + 1]));
         assert_eq!(0b0, cpu.read_register(0xF));
         assert_eq!(pc + 2, cpu.pc.current);
+        assert!(cpu.draw);
     }
 
     #[test]
@@ -1374,6 +1383,7 @@ mod tests {
         assert_eq!((0b0, 0b0), (cpu.memory[addr_1], cpu.memory[addr_1 + 1]));
         assert_eq!(0b1, cpu.read_register(0xF));
         assert_eq!(pc + 2, cpu.pc.current);
+        assert!(cpu.draw);
     }
 
     #[test]
@@ -1398,6 +1408,7 @@ mod tests {
         assert_eq!(0b11111111, cpu.memory[addr_1]);
         assert_eq!(0b0, cpu.read_register(0xF));
         assert_eq!(pc + 2, cpu.pc.current);
+        assert!(cpu.draw);
     }
 
     #[test]
@@ -1422,6 +1433,7 @@ mod tests {
         assert_eq!((0b00111111, 0b11000000), (cpu.memory[addr_1], cpu.memory[addr_1 + 1]));
         assert_eq!(0b0, cpu.read_register(0xF));
         assert_eq!(pc + 2, cpu.pc.current);
+        assert!(cpu.draw);
     }
 
     #[test]
@@ -1446,6 +1458,29 @@ mod tests {
         assert_eq!(0b11111111, cpu.memory[addr_1]);
         assert_eq!(0b0, cpu.read_register(0xF));
         assert_eq!(pc + 2, cpu.pc.current);
+        assert!(cpu.draw);
+    }
+
+    #[test]
+    fn operation_dxyn_draw_vx_vy_n_no_change() {
+        let rom = Vec::new();
+        let mut cpu = Cpu::new(&rom);
+        let opcode = Opcode::new(0xD012);
+        let op = cpu.operation(&opcode);
+        let pc = cpu.pc.current;
+
+        cpu.load_i(ROM_RANGE.start);
+        cpu.v[0] = 0;
+        cpu.v[1] = 0;
+
+        op(&mut cpu, &opcode);
+        let addr_0 = DISPLAY_RANGE.start;
+        let addr_1 = DISPLAY_RANGE.start + 1 * 8;
+        assert_eq!(0b00000000, cpu.memory[addr_0]);
+        assert_eq!(0b00000000, cpu.memory[addr_1]);
+        assert_eq!(0b0, cpu.read_register(0xF));
+        assert_eq!(pc + 2, cpu.pc.current);
+        assert!(!cpu.draw);
     }
 
     #[test]
