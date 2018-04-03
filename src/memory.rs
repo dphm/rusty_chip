@@ -93,7 +93,7 @@ mod tests {
     fn load_data_with_len_equal_range() {
         let data: Vec<Byte> = vec![0xA, 0xB, 0xC, 0xD, 0xE];
         let range: Range<Address> = 0x0..0x5;
-        let mut memory = Memory::new(0x1000, 0x0);
+        let mut memory = Memory::new(0x10, 0x0);
 
         memory.load(&data, range);
         assert_eq!(0xA, memory[0x0]);
@@ -107,7 +107,7 @@ mod tests {
     fn load_data_with_len_less_than_range() {
         let data: Vec<Byte> = vec![0xA, 0xB, 0xC];
         let range: Range<Address> = 0x0..0x5;
-        let mut memory = Memory::new(0x1000, 0x0);
+        let mut memory = Memory::new(0x10, 0x0);
 
         memory.load(&data, range);
         assert_eq!(0xA, memory[0x0]);
@@ -120,7 +120,7 @@ mod tests {
     fn load_data_with_len_greater_than_range_panics() {
         let data: Vec<Byte> = vec![0xA, 0xB, 0xC, 0xD, 0xE, 0xF];
         let range: Range<Address> = 0x0..0x5;
-        let mut memory = Memory::new(0x1000, 0x0);
+        let mut memory = Memory::new(0x10, 0x0);
 
         memory.load(&data, range);
     }
