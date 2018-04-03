@@ -13,9 +13,9 @@ use cpu::Cpu;
 type Byte = u8;
 type Address = usize;
 
-pub fn init_cpu<'a, G: 'a>(rom: &Vec<Byte>, graphics: &'a G) -> Cpu<'a, G>
+pub fn init_cpu<'a, G: 'a>(rom: &Vec<Byte>, graphics: &'a mut G) -> Cpu<'a, G>
     where G: output::graphics::GraphicsOutput {
-    Cpu::new(&rom, &graphics)
+    Cpu::new(rom, graphics)
 }
 
 pub fn load_rom(directory: &str, filename: &str) -> Vec<Byte> {
