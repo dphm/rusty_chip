@@ -1,4 +1,4 @@
-use std::fmt::{self, Debug, Display};
+use std::fmt;
 
 use {Address, Byte};
 
@@ -43,13 +43,13 @@ impl Opcode {
     }
 }
 
-impl Display for Opcode {
+impl fmt::Display for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:04x}", self.code)
     }
 }
 
-impl Debug for Opcode {
+impl fmt::Debug for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Opcode {{ code: {:04x} }}", self.code)
     }

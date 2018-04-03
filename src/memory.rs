@@ -1,7 +1,5 @@
-use std::cmp::PartialEq;
-use std::clone::Clone;
-use std::fmt::{self, Debug};
-use std::ops::{Deref, Index, IndexMut, Range};
+use std::{cmp, clone, fmt, ops};
+use std::ops::Range;
 
 use Address;
 
@@ -10,7 +8,7 @@ pub struct Memory<T> {
     memory: Vec<T>
 }
 
-impl<T> Memory<T> where T: Clone {
+impl<T> Memory<T> where T: clone::Clone {
     pub fn new(size: usize, default: T) -> Memory<T> {
         let mut memory = Vec::new();
         memory.resize(size, default);
@@ -31,7 +29,13 @@ impl<T> Memory<T> where T: Clone {
     }
 }
 
-impl<T> Deref for Memory<T> {
+impl<T> cmp::PartialEq for Memory<T> where T: cmp::PartialEq {
+    fn eq(&self, other: &Memory<T>) -> bool {
+        self.memory == other.memory
+    }
+}
+
+impl<T> ops::Deref for Memory<T> {
     type Target = Vec<T>;
 
     fn deref(&self) -> &Self::Target {
@@ -39,7 +43,7 @@ impl<T> Deref for Memory<T> {
     }
 }
 
-impl<T> Index<Address> for Memory<T> {
+impl<T> ops::Index<Address> for Memory<T> {
     type Output = T;
 
     fn index(&self, addr: Address) -> &Self::Output {
@@ -47,13 +51,13 @@ impl<T> Index<Address> for Memory<T> {
     }
 }
 
-impl<T> IndexMut<Address> for Memory<T> {
+impl<T> ops::IndexMut<Address> for Memory<T> {
     fn index_mut(&mut self, addr: Address) -> &mut T {
         &mut self.memory[addr]
     }
 }
 
-impl<T> Index<Range<Address>> for Memory<T> {
+impl<T> ops::Index<Range<Address>> for Memory<T> {
     type Output = [T];
 
     fn index(&self, range: Range<Address>) -> &Self::Output {
@@ -61,7 +65,7 @@ impl<T> Index<Range<Address>> for Memory<T> {
     }
 }
 
-impl<T> Debug for Memory<T> where T: fmt::LowerHex {
+impl<T> fmt::Debug for Memory<T> where T: fmt::LowerHex {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let hex_vals = self.memory.iter().map(|val| format!("{:02x}", &val));
 
@@ -75,12 +79,6 @@ impl<T> Debug for Memory<T> where T: fmt::LowerHex {
             });
 
         write!(f, "{}", lines)
-    }
-}
-
-impl<T> PartialEq for Memory<T> where T: PartialEq {
-    fn eq(&self, other: &Memory<T>) -> bool {
-        self.memory == other.memory
     }
 }
 

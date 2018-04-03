@@ -1,4 +1,4 @@
-use std::fmt::{self, Debug};
+use std::fmt;
 use std::ops::Range;
 
 use Address;
@@ -49,7 +49,7 @@ impl Pointer {
     }
 }
 
-impl Debug for Pointer {
+impl fmt::Debug for Pointer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f,
             "Pointer {{ current: {:x}, range: {:x}..{:x}, step_size: {} }}",
