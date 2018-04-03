@@ -1,66 +1,76 @@
 use std::cmp::PartialEq;
+use std::clone::Clone;
 use std::fmt::{self, Debug};
-use std::ops::{Index, IndexMut, Range};
+use std::ops::{Deref, Index, IndexMut, Range};
 
-use {Address, Byte};
+use Address;
 
 #[derive(Clone)]
-pub struct Memory {
-    mem: [Byte; Memory::MAX_SIZE]
+pub struct Memory<T> {
+    memory: Vec<T>
 }
 
-impl Memory {
-    pub const MAX_SIZE: usize = 0x1000;
+impl<T> Memory<T> where T: Clone {
+    pub fn new(size: usize, default: T) -> Memory<T> {
+        let mut memory = Vec::new();
+        memory.resize(size, default);
 
-    pub fn new() -> Memory {
         Memory {
-            mem: [0x0; Memory::MAX_SIZE]
+            memory
         }
     }
 
-    pub fn load(&mut self, data: &[Byte], range: Range<Address>) {
+    pub fn load(&mut self, data: &[T], range: Range<Address>) {
         for i in 0..data.len() {
             if i >= range.end {
                 panic!("Data length {:?} is greater than range size {:?}", data.len(), range);
             }
 
-            self.mem[range.start + i] = data[i];
+            self.memory[range.start + i] = data[i].clone();
         }
     }
 }
 
-impl Index<Address> for Memory {
-    type Output = Byte;
+impl<T> Deref for Memory<T> {
+    type Target = Vec<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.memory
+    }
+}
+
+impl<T> Index<Address> for Memory<T> {
+    type Output = T;
 
     fn index(&self, addr: Address) -> &Self::Output {
-        &self.mem[addr]
+        &self.memory[addr]
     }
 }
 
-impl IndexMut<Address> for Memory {
-    fn index_mut(&mut self, addr: Address) -> &mut Byte {
-        &mut self.mem[addr]
+impl<T> IndexMut<Address> for Memory<T> {
+    fn index_mut(&mut self, addr: Address) -> &mut T {
+        &mut self.memory[addr]
     }
 }
 
-impl Index<Range<Address>> for Memory {
-    type Output = [Byte];
+impl<T> Index<Range<Address>> for Memory<T> {
+    type Output = [T];
 
     fn index(&self, range: Range<Address>) -> &Self::Output {
-        &self.mem[range]
+        &self.memory[range]
     }
 }
 
-impl Debug for Memory {
+impl<T> Debug for Memory<T> where T: fmt::LowerHex {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let hex_bytes = self.mem.iter().map(|byte| format!("{:02x}", &byte));
+        let hex_vals = self.memory.iter().map(|val| format!("{:02x}", &val));
 
-        let lines = hex_bytes.enumerate()
-            .fold(String::new(), |mut acc, (i, hex_byte)| {
+        let lines = hex_vals.enumerate()
+            .fold(String::new(), |mut acc, (i, hex_val)| {
                 if i != 0 && i % 2 == 0 { acc.push_str(" "); }
                 if i % 16 == 0 { acc.push_str("\n"); }
 
-                acc.push_str(&hex_byte);
+                acc.push_str(&hex_val);
                 acc
             });
 
@@ -68,21 +78,22 @@ impl Debug for Memory {
     }
 }
 
-impl PartialEq for Memory {
-    fn eq(&self, other: &Memory) -> bool {
-        self.mem.to_vec() == other.mem.to_vec()
+impl<T> PartialEq for Memory<T> where T: PartialEq {
+    fn eq(&self, other: &Memory<T>) -> bool {
+        self.memory == other.memory
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use Byte;
 
     #[test]
     fn load_data_with_len_equal_range() {
         let data: Vec<Byte> = vec![0xA, 0xB, 0xC, 0xD, 0xE];
         let range: Range<Address> = 0x0..0x5;
-        let mut memory = Memory::new();
+        let mut memory = Memory::new(0x1000, 0x0);
 
         memory.load(&data, range);
         assert_eq!(0xA, memory[0x0]);
@@ -96,7 +107,7 @@ mod tests {
     fn load_data_with_len_less_than_range() {
         let data: Vec<Byte> = vec![0xA, 0xB, 0xC];
         let range: Range<Address> = 0x0..0x5;
-        let mut memory = Memory::new();
+        let mut memory = Memory::new(0x1000, 0x0);
 
         memory.load(&data, range);
         assert_eq!(0xA, memory[0x0]);
@@ -109,7 +120,7 @@ mod tests {
     fn load_data_with_len_greater_than_range_panics() {
         let data: Vec<Byte> = vec![0xA, 0xB, 0xC, 0xD, 0xE, 0xF];
         let range: Range<Address> = 0x0..0x5;
-        let mut memory = Memory::new();
+        let mut memory = Memory::new(0x1000, 0x0);
 
         memory.load(&data, range);
     }

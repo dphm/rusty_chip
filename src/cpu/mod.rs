@@ -1,8 +1,9 @@
 const NUM_REGISTERS: usize = 16;
 
+const MAX_ADDR: Address = 0x1000;
 const FONT_RANGE: Range<Address> = 0x0..0x200;
 const ROM_RANGE: Range<Address> = 0x200..0xFA0;
-const STACK_RANGE: Range<Address> = 0xFA0..Memory::MAX_SIZE;
+const STACK_RANGE: Range<Address> = 0xFA0..MAX_ADDR;
 
 extern crate rand;
 
@@ -34,13 +35,13 @@ pub struct Cpu<'a, G: 'a> where G: graphics::GraphicsOutput {
     dt: Timer,
     st: Timer,
     v: [Byte; NUM_REGISTERS],
-    memory: Memory,
+    memory: Memory<Byte>,
     graphics: &'a mut G
 }
 
 impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
     pub fn new(rom: &Vec<Byte>, graphics: &'a mut G) -> Cpu<'a, G> {
-        let mut memory = Memory::new();
+        let mut memory = Memory::new(MAX_ADDR, 0x0);
         memory.load(&font::FONT_SET, FONT_RANGE);
         memory.load(&rom, ROM_RANGE);
 
