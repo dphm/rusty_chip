@@ -30,7 +30,7 @@ impl Pointer {
     }
 
     pub fn set(&mut self, addr: Address) {
-        if !self.range.contains(addr) {
+        if !self.range.contains(&addr) {
             panic!(
                 "Address {:x} out of pointer range ({:x}..{:x})",
                 addr, self.range.start, self.range.end
