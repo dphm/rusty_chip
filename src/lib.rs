@@ -1,7 +1,6 @@
 #![feature(range_contains)]
 
 mod cpu;
-mod memory;
 pub mod output;
 
 use std::io::{BufReader, Read};

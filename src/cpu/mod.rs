@@ -15,13 +15,11 @@ use std::ops::Range;
 
 use cpu::ops::Operation;
 use cpu::opcode::Opcode;
-use memory::Memory;
 use output::{font, graphics};
 
 use {Address, Byte};
 type Register = usize;
 
-#[derive(Debug, PartialEq)]
 pub struct Cpu<'a, G: 'a> where G: graphics::GraphicsOutput {
     pub exit: bool,
     pub beep: bool,
@@ -31,17 +29,13 @@ pub struct Cpu<'a, G: 'a> where G: graphics::GraphicsOutput {
     dt: Byte,
     st: Byte,
     v: [Byte; NUM_REGISTERS],
-    memory: Memory<Byte>,
+    memory: [Byte; MAX_ADDR],
     graphics: &'a mut G
 }
 
 impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
     pub fn new(rom: &Vec<Byte>, graphics: &'a mut G) -> Cpu<'a, G> {
-        let mut memory = Memory::new(MAX_ADDR, 0x0);
-        memory.load(&font::FONT_SET, FONT_RANGE);
-        memory.load(&rom, ROM_RANGE);
-
-        Cpu {
+        let mut cpu = Cpu {
             exit: false,
             beep: true,
             pc: ROM_RANGE.start,
@@ -50,9 +44,14 @@ impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
             dt: 60,
             st: 60,
             v: [0x0; NUM_REGISTERS],
-            memory,
+            memory: [0x0; MAX_ADDR],
             graphics
-        }
+        };
+
+        cpu.load_memory(&font::FONT_SET, FONT_RANGE);
+        cpu.load_memory(&rom, ROM_RANGE);
+
+        cpu
     }
 
     pub fn step(&mut self) {
@@ -219,6 +218,12 @@ impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
         let addr = self.pc;
         self.memory[current] = ((addr & 0xFF00) >> 8) as Byte;
         self.memory[current + 1] = (addr & 0x00FF) as Byte;
+    }
+
+    fn load_memory(&mut self, data: &[Byte], range: Range<Address>) {
+        for i in 0..data.len() {
+            self.memory[range.start + i] = data[i].clone();
+        }
     }
 }
 
@@ -591,7 +596,7 @@ mod tests {
         let memory = cpu.memory.clone();
 
         op(&mut cpu, &opcode);
-        assert_eq!(memory, cpu.memory);
+        assert_eq!(memory.to_vec(), cpu.memory.to_vec());
         assert_eq!(pc + 2, cpu.pc);
     }
 

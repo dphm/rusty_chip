@@ -4,7 +4,6 @@ pub const SCREEN_HEIGHT: usize = 32;
 pub const SCREEN_WIDTH_SPRITES: usize = SCREEN_WIDTH / SPRITE_WIDTH;
 const SCREEN_SIZE: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
 
-use memory::Memory;
 use Address;
 
 pub trait GraphicsOutput {
@@ -16,14 +15,14 @@ pub trait GraphicsOutput {
 
 pub struct Display {
     redraw: bool,
-    memory: Memory<bool>
+    memory: [bool; SCREEN_SIZE]
 }
 
 impl Display {
     pub fn new() -> Display {
         Display {
             redraw: false,
-            memory: Memory::new(SCREEN_SIZE, false)
+            memory: [false; SCREEN_SIZE]
         }
     }
 }
@@ -49,7 +48,7 @@ impl GraphicsOutput for Display {
     }
 
     fn clear(&mut self) {
-        self.memory = Memory::new(SCREEN_SIZE, false);
+        self.memory = [false; SCREEN_SIZE];
     }
 
     fn draw(&mut self) {
@@ -183,7 +182,7 @@ mod tests {
     #[test]
     fn clear_display() {
         let mut d = Display::new();
-        d.memory = Memory::new(SCREEN_SIZE, true);
+        d.memory = [true; SCREEN_SIZE];
 
         d.clear();
         assert!(d.memory.iter().all(|pixel| *pixel == false), "clear should set all pixels to false");
