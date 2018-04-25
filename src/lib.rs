@@ -8,13 +8,13 @@ use std::fs::File;
 use std::path::Path;
 
 use cpu::Cpu;
+use output::graphics::Display;
 
 type Byte = u8;
 type Address = usize;
 
-pub fn init_cpu<'a, G: 'a>(rom: &Vec<Byte>, graphics: &'a mut G) -> Cpu<'a, G>
-    where G: output::graphics::GraphicsOutput {
-    Cpu::new(rom, graphics)
+pub fn init_cpu(rom: &Vec<Byte>, display: Display) -> Cpu {
+    Cpu::new(rom, display)
 }
 
 pub fn load_rom(directory: &str, filename: &str) -> Vec<Byte> {

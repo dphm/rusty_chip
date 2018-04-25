@@ -6,13 +6,6 @@ const SCREEN_SIZE: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
 
 use Address;
 
-pub trait GraphicsOutput {
-    fn read_pixel(&self, Address, Address) -> bool;
-    fn update_pixel(&mut self, Address, Address, bool) -> bool;
-    fn clear(&mut self);
-    fn draw(&mut self);
-}
-
 pub struct Display {
     redraw: bool,
     memory: [bool; SCREEN_SIZE]
@@ -25,16 +18,14 @@ impl Display {
             memory: [false; SCREEN_SIZE]
         }
     }
-}
 
-impl GraphicsOutput for Display {
-    fn read_pixel(&self, x: Address, y: Address) -> bool {
+    pub fn read_pixel(&self, x: Address, y: Address) -> bool {
         let x = x % SCREEN_WIDTH;
         let y = y % SCREEN_HEIGHT;
         self.memory[y * SCREEN_WIDTH + x]
     }
 
-    fn update_pixel(&mut self, x: Address, y: Address, val: bool) -> bool {
+    pub fn update_pixel(&mut self, x: Address, y: Address, val: bool) -> bool {
         let x = x % SCREEN_WIDTH;
         let y = y % SCREEN_HEIGHT;
         let old = self.read_pixel(x, y);
@@ -47,11 +38,11 @@ impl GraphicsOutput for Display {
         collision
     }
 
-    fn clear(&mut self) {
+    pub fn clear(&mut self) {
         self.memory = [false; SCREEN_SIZE];
     }
 
-    fn draw(&mut self) {
+    pub fn draw(&mut self) {
         if !self.redraw { return; }
 
         let lines = self.memory.iter().enumerate()

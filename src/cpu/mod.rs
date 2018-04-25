@@ -15,14 +15,14 @@ use std::ops::Range;
 
 use cpu::ops::Operation;
 use cpu::opcode::Opcode;
-use output::{font, graphics};
+use output::font;
+use output::graphics::Display;
 
 use {Address, Byte};
 type Register = usize;
 
-pub struct Cpu<'a, G: 'a> where G: graphics::GraphicsOutput {
+pub struct Cpu {
     pub exit: bool,
-    pub beep: bool,
     pc: Address,
     sp: Address,
     i: Address,
@@ -30,14 +30,13 @@ pub struct Cpu<'a, G: 'a> where G: graphics::GraphicsOutput {
     st: Byte,
     v: [Byte; NUM_REGISTERS],
     memory: [Byte; MAX_ADDR],
-    graphics: &'a mut G
+    display: Display
 }
 
-impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
-    pub fn new(rom: &Vec<Byte>, graphics: &'a mut G) -> Cpu<'a, G> {
+impl Cpu {
+    pub fn new(rom: &Vec<Byte>, display: Display) -> Cpu {
         let mut cpu = Cpu {
             exit: false,
-            beep: true,
             pc: ROM_RANGE.start,
             sp: STACK_RANGE.start,
             i: FONT_RANGE.start,
@@ -45,7 +44,7 @@ impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
             st: 60,
             v: [0x0; NUM_REGISTERS],
             memory: [0x0; MAX_ADDR],
-            graphics
+            display
         };
 
         cpu.load_memory(&font::FONT_SET, FONT_RANGE);
@@ -68,7 +67,7 @@ impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
         Opcode::from_bytes(bytes)
     }
 
-    pub fn operation(&mut self, opcode: &Opcode) -> fn(&mut Cpu<'a, G>, &Opcode) {
+    pub fn operation(&mut self, opcode: &Opcode) -> fn(&mut Cpu, &Opcode) {
         match opcode.first_hex_digit() {
             0x0 => {
                 match opcode.kk() {
@@ -182,7 +181,7 @@ impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
         let mut collision = false;
         for b in 0..8 {
             let bit = byte.wrapping_shr(8 - b - 1) & 0b1;
-            if self.graphics.update_pixel(x + b as usize, y, bit == 1) {
+            if self.display.update_pixel(x + b as usize, y, bit == 1) {
                 collision = true;
             }
         }
@@ -227,7 +226,7 @@ impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
     }
 }
 
-impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
+impl Operation for Cpu {
     fn no_op(&mut self, _opcode: &Opcode) {
         self.advance_pc();
     }
@@ -237,7 +236,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
     }
 
     fn clear_display(&mut self, _opcode: &Opcode) {
-        self.graphics.clear();
+        self.display.clear();
         self.advance_pc();
         println!("\tCLS");
     }
@@ -453,7 +452,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         }
 
         self.load_flag(collision);
-        self.graphics.draw();
+        self.display.draw();
         self.advance_pc();
 
         println!("\tDRW Vx: {:x}, Vy: {:x}, {:?}", vx, vy, sprite_bytes);
@@ -550,13 +549,13 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use output::graphics::GraphicsOutput;
+    use output::graphics;
 
     #[test]
     fn new_loads_font_to_memory() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let cpu = Cpu::new(&rom, &mut graphics);
+        let cpu = Cpu::new(&rom, display);
 
         let font_set = font::FONT_SET.to_vec();
         let range = FONT_RANGE.start..FONT_RANGE.start + font::FONT_SET.len();
@@ -566,9 +565,9 @@ mod tests {
 
     #[test]
     fn new_loads_rom_to_memory() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = vec![0x00, 0x01, 0x02, 0x03];
-        let cpu = Cpu::new(&rom, &mut graphics);
+        let cpu = Cpu::new(&rom, display);
         
         let range = ROM_RANGE.start..ROM_RANGE.start + rom.len();
         let mem = cpu.memory[range].to_vec();
@@ -577,18 +576,18 @@ mod tests {
 
     #[test]
     fn fetch_opcode_fetches_two_current_bytes() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = vec![0xAB, 0xCD, 0xEF, 0xFF];
-        let cpu = Cpu::new(&rom, &mut graphics);
+        let cpu = Cpu::new(&rom, display);
 
         assert_eq!(Opcode::new(0xABCD), cpu.fetch_opcode());        
     }
 
     #[test]
     fn operation_0000_no_op() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x0000);
         let op = cpu.operation(&opcode);
@@ -602,9 +601,9 @@ mod tests {
 
     #[test]
     fn operation_00e0_clear_display() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x00E0);
         let op = cpu.operation(&opcode);
@@ -613,7 +612,7 @@ mod tests {
         op(&mut cpu, &opcode);
         for x in 0..graphics::SCREEN_WIDTH {
             for y in 0..graphics::SCREEN_HEIGHT {
-                assert!(!cpu.graphics.read_pixel(x, y));
+                assert!(!cpu.display.read_pixel(x, y));
             }
         }
         assert_eq!(pc + 2, cpu.pc);
@@ -621,9 +620,9 @@ mod tests {
 
     #[test]
     fn operation_00ee_return_from_subroutine() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x00EE);
         let op = cpu.operation(&opcode);
@@ -640,9 +639,9 @@ mod tests {
 
     #[test]
     fn operation_1nnn_jump_addr() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x1404);
         let op = cpu.operation(&opcode);
@@ -653,9 +652,9 @@ mod tests {
 
     #[test]
     fn operation_2nnn_call_subroutine() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x2404);
         let op = cpu.operation(&opcode);
@@ -668,9 +667,9 @@ mod tests {
 
     #[test]
     fn operation_3xkk_skip_equal_vx_byte() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x3123);
         let op = cpu.operation(&opcode);
@@ -684,9 +683,9 @@ mod tests {
 
     #[test]
     fn operation_3xkk_skip_equal_vx_byte_no_skip() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x3122);
         let op = cpu.operation(&opcode);
@@ -700,9 +699,9 @@ mod tests {
 
     #[test]
     fn operation_4xkk_skip_not_equal_vx_byte() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x4123);
         let op = cpu.operation(&opcode);
@@ -716,9 +715,9 @@ mod tests {
 
     #[test]
     fn operation_4xkk_skip_not_equal_vx_byte_no_skip() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x4123);
         let op = cpu.operation(&opcode);
@@ -732,9 +731,9 @@ mod tests {
 
     #[test]
     fn operation_5xy0_skip_equal_vx_vy() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x5010);
         let op = cpu.operation(&opcode);
@@ -749,9 +748,9 @@ mod tests {
 
     #[test]
     fn operation_5xy0_skip_equal_vx_vy_no_skip() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x5010);
         let op = cpu.operation(&opcode);
@@ -766,9 +765,9 @@ mod tests {
 
     #[test]
     fn operation_6xkk_load_vx_byte() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x6123);
         let op = cpu.operation(&opcode);
@@ -781,9 +780,9 @@ mod tests {
 
     #[test]
     fn operation_7xkk_add_vx_byte() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x71FF);
         let op = cpu.operation(&opcode);
@@ -796,9 +795,9 @@ mod tests {
 
     #[test]
     fn operation_7xkk_add_vx_byte_wrap() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x71FF);
         let op = cpu.operation(&opcode);
@@ -813,9 +812,9 @@ mod tests {
 
     #[test]
     fn operation_8xy0_load_vx_vy() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8010);
         let op = cpu.operation(&opcode);
@@ -830,9 +829,9 @@ mod tests {
 
     #[test]
     fn operation_8xy1_or_vx_vy_00() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8011);
         let op = cpu.operation(&opcode);
@@ -848,9 +847,9 @@ mod tests {
 
     #[test]
     fn operation_8xy1_or_vx_vy_01() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8011);
         let op = cpu.operation(&opcode);
@@ -866,9 +865,9 @@ mod tests {
 
     #[test]
     fn operation_8xy1_or_vx_vy_10() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8011);
         let op = cpu.operation(&opcode);
@@ -884,9 +883,9 @@ mod tests {
 
     #[test]
     fn operation_8xy1_or_vx_vy_11() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8011);
         let op = cpu.operation(&opcode);
@@ -902,9 +901,9 @@ mod tests {
 
     #[test]
     fn operation_8xy2_and_vx_vy_00() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8012);
         let op = cpu.operation(&opcode);
@@ -920,9 +919,9 @@ mod tests {
 
     #[test]
     fn operation_8xy2_and_vx_vy_01() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8012);
         let op = cpu.operation(&opcode);
@@ -938,9 +937,9 @@ mod tests {
 
     #[test]
     fn operation_8xy2_and_vx_vy_10() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8012);
         let op = cpu.operation(&opcode);
@@ -956,9 +955,9 @@ mod tests {
 
     #[test]
     fn operation_8xy2_and_vx_vy_11() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8012);
         let op = cpu.operation(&opcode);
@@ -974,9 +973,9 @@ mod tests {
 
     #[test]
     fn operation_8xy3_xor_vx_vy_00() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8013);
         let op = cpu.operation(&opcode);
@@ -992,9 +991,9 @@ mod tests {
 
     #[test]
     fn operation_8xy3_xor_vx_vy_01() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8013);
         let op = cpu.operation(&opcode);
@@ -1010,9 +1009,9 @@ mod tests {
 
     #[test]
     fn operation_8xy3_xor_vx_vy_10() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8013);
         let op = cpu.operation(&opcode);
@@ -1028,9 +1027,9 @@ mod tests {
 
     #[test]
     fn operation_8xy3_xor_vx_vy_11() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8013);
         let op = cpu.operation(&opcode);
@@ -1046,9 +1045,9 @@ mod tests {
 
     #[test]
     fn operation_8xy4_add_vx_vy() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8014);
         let op = cpu.operation(&opcode);
@@ -1065,9 +1064,9 @@ mod tests {
 
     #[test]
     fn operation_8xy4_add_vx_vy_carry() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8014);
         let op = cpu.operation(&opcode);
@@ -1084,9 +1083,9 @@ mod tests {
 
     #[test]
     fn operation_8xy5_sub_vx_vy() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8015);
         let op = cpu.operation(&opcode);
@@ -1103,9 +1102,9 @@ mod tests {
 
     #[test]
     fn operation_8xy5_sub_vx_vy_carry() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8015);
         let op = cpu.operation(&opcode);
@@ -1122,9 +1121,9 @@ mod tests {
 
     #[test]
     fn operation_8xy6_shr_vx_vy() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8016);
         let op = cpu.operation(&opcode);
@@ -1140,9 +1139,9 @@ mod tests {
 
     #[test]
     fn operation_8xy6_shr_vx_vy_sig_bit() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8016);
         let op = cpu.operation(&opcode);
@@ -1158,9 +1157,9 @@ mod tests {
 
     #[test]
     fn operation_8xy7_subn_vx_vy() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8017);
         let op = cpu.operation(&opcode);
@@ -1177,9 +1176,9 @@ mod tests {
 
     #[test]
     fn operation_8xy7_subn_vx_vy_carry() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x8017);
         let op = cpu.operation(&opcode);
@@ -1196,9 +1195,9 @@ mod tests {
 
     #[test]
     fn operation_8xye_shl_vx_vy() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x801E);
         let op = cpu.operation(&opcode);
@@ -1214,9 +1213,9 @@ mod tests {
 
     #[test]
     fn operation_8xye_shl_vx_vy_sig_bit() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x801E);
         let op = cpu.operation(&opcode);
@@ -1232,9 +1231,9 @@ mod tests {
 
     #[test]
     fn operation_9xy0_skip_not_equal_vx_vy() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x9010);
         let op = cpu.operation(&opcode);
@@ -1249,9 +1248,9 @@ mod tests {
 
     #[test]
     fn operation_9xy0_skip_not_equal_vx_vy_no_skip() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0x9010);
         let op = cpu.operation(&opcode);
@@ -1266,9 +1265,9 @@ mod tests {
 
     #[test]
     fn operation_annn_load_i_addr() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0xA456);
         let op = cpu.operation(&opcode);
@@ -1281,9 +1280,9 @@ mod tests {
 
     #[test]
     fn operation_bnnn_jump_v0_addr() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0xB300);
         let op = cpu.operation(&opcode);
@@ -1296,9 +1295,9 @@ mod tests {
 
     #[test]
     fn operation_cxkk_rand_vx_byte() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0xC00F);
         let op = cpu.operation(&opcode);
@@ -1314,9 +1313,9 @@ mod tests {
 
     #[test]
     fn operation_dxyn_draw_vx_vy_n() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0xD012);
         let op = cpu.operation(&opcode);
@@ -1330,23 +1329,23 @@ mod tests {
         cpu.memory[i + 1] = 0b00001111;
 
         op(&mut cpu, &opcode);
-        assert!(cpu.graphics.read_pixel(8, 5));
-        assert!(cpu.graphics.read_pixel(9, 5));
-        assert!(cpu.graphics.read_pixel(10, 5));
-        assert!(cpu.graphics.read_pixel(11, 5));
-        assert!(!cpu.graphics.read_pixel(12, 5));
-        assert!(!cpu.graphics.read_pixel(13, 5));
-        assert!(!cpu.graphics.read_pixel(14, 5));
-        assert!(!cpu.graphics.read_pixel(15, 5));
+        assert!(cpu.display.read_pixel(8, 5));
+        assert!(cpu.display.read_pixel(9, 5));
+        assert!(cpu.display.read_pixel(10, 5));
+        assert!(cpu.display.read_pixel(11, 5));
+        assert!(!cpu.display.read_pixel(12, 5));
+        assert!(!cpu.display.read_pixel(13, 5));
+        assert!(!cpu.display.read_pixel(14, 5));
+        assert!(!cpu.display.read_pixel(15, 5));
 
-        assert!(!cpu.graphics.read_pixel(8, 6));
-        assert!(!cpu.graphics.read_pixel(9, 6));
-        assert!(!cpu.graphics.read_pixel(10, 6));
-        assert!(!cpu.graphics.read_pixel(11, 6));
-        assert!(cpu.graphics.read_pixel(12, 6));
-        assert!(cpu.graphics.read_pixel(13, 6));
-        assert!(cpu.graphics.read_pixel(14, 6));
-        assert!(cpu.graphics.read_pixel(15, 6));
+        assert!(!cpu.display.read_pixel(8, 6));
+        assert!(!cpu.display.read_pixel(9, 6));
+        assert!(!cpu.display.read_pixel(10, 6));
+        assert!(!cpu.display.read_pixel(11, 6));
+        assert!(cpu.display.read_pixel(12, 6));
+        assert!(cpu.display.read_pixel(13, 6));
+        assert!(cpu.display.read_pixel(14, 6));
+        assert!(cpu.display.read_pixel(15, 6));
 
         assert_eq!(0b0, cpu.read_register(0xF));
         assert_eq!(pc + 2, cpu.pc);
@@ -1354,9 +1353,9 @@ mod tests {
 
     #[test]
     fn operation_dxyn_draw_vx_vy_n_collision() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0xD012);
         let op = cpu.operation(&opcode);
@@ -1369,26 +1368,26 @@ mod tests {
         cpu.memory[i + 0] = 0b11110000;
         cpu.memory[i + 1] = 0b00001111;
 
-        cpu.graphics.update_pixel(12, 6, true);
+        cpu.display.update_pixel(12, 6, true);
 
         op(&mut cpu, &opcode);
-        assert!(cpu.graphics.read_pixel(8, 5));
-        assert!(cpu.graphics.read_pixel(9, 5));
-        assert!(cpu.graphics.read_pixel(10, 5));
-        assert!(cpu.graphics.read_pixel(11, 5));
-        assert!(!cpu.graphics.read_pixel(12, 5));
-        assert!(!cpu.graphics.read_pixel(13, 5));
-        assert!(!cpu.graphics.read_pixel(14, 5));
-        assert!(!cpu.graphics.read_pixel(15, 5));
+        assert!(cpu.display.read_pixel(8, 5));
+        assert!(cpu.display.read_pixel(9, 5));
+        assert!(cpu.display.read_pixel(10, 5));
+        assert!(cpu.display.read_pixel(11, 5));
+        assert!(!cpu.display.read_pixel(12, 5));
+        assert!(!cpu.display.read_pixel(13, 5));
+        assert!(!cpu.display.read_pixel(14, 5));
+        assert!(!cpu.display.read_pixel(15, 5));
 
-        assert!(!cpu.graphics.read_pixel(8, 6));
-        assert!(!cpu.graphics.read_pixel(9, 6));
-        assert!(!cpu.graphics.read_pixel(10, 6));
-        assert!(!cpu.graphics.read_pixel(11, 6));
-        assert!(!cpu.graphics.read_pixel(12, 6));
-        assert!(cpu.graphics.read_pixel(13, 6));
-        assert!(cpu.graphics.read_pixel(14, 6));
-        assert!(cpu.graphics.read_pixel(15, 6));
+        assert!(!cpu.display.read_pixel(8, 6));
+        assert!(!cpu.display.read_pixel(9, 6));
+        assert!(!cpu.display.read_pixel(10, 6));
+        assert!(!cpu.display.read_pixel(11, 6));
+        assert!(!cpu.display.read_pixel(12, 6));
+        assert!(cpu.display.read_pixel(13, 6));
+        assert!(cpu.display.read_pixel(14, 6));
+        assert!(cpu.display.read_pixel(15, 6));
 
         assert_eq!(0b1, cpu.read_register(0xF));
         assert_eq!(pc + 2, cpu.pc);
@@ -1396,9 +1395,9 @@ mod tests {
 
     #[test]
     fn operation_dxyn_draw_vx_vy_n_with_vx_wrap() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0xD012);
         let op = cpu.operation(&opcode);
@@ -1412,23 +1411,23 @@ mod tests {
         cpu.memory[i + 1] = 0b00001111;
 
         op(&mut cpu, &opcode);
-        assert!(cpu.graphics.read_pixel(60, 5));
-        assert!(cpu.graphics.read_pixel(61, 5));
-        assert!(cpu.graphics.read_pixel(62, 5));
-        assert!(cpu.graphics.read_pixel(63, 5));
-        assert!(!cpu.graphics.read_pixel(0, 5));
-        assert!(!cpu.graphics.read_pixel(1, 5));
-        assert!(!cpu.graphics.read_pixel(2, 5));
-        assert!(!cpu.graphics.read_pixel(3, 5));
+        assert!(cpu.display.read_pixel(60, 5));
+        assert!(cpu.display.read_pixel(61, 5));
+        assert!(cpu.display.read_pixel(62, 5));
+        assert!(cpu.display.read_pixel(63, 5));
+        assert!(!cpu.display.read_pixel(0, 5));
+        assert!(!cpu.display.read_pixel(1, 5));
+        assert!(!cpu.display.read_pixel(2, 5));
+        assert!(!cpu.display.read_pixel(3, 5));
 
-        assert!(!cpu.graphics.read_pixel(60, 6));
-        assert!(!cpu.graphics.read_pixel(61, 6));
-        assert!(!cpu.graphics.read_pixel(62, 6));
-        assert!(!cpu.graphics.read_pixel(63, 6));
-        assert!(cpu.graphics.read_pixel(0, 6));
-        assert!(cpu.graphics.read_pixel(1, 6));
-        assert!(cpu.graphics.read_pixel(2, 6));
-        assert!(cpu.graphics.read_pixel(3, 6));
+        assert!(!cpu.display.read_pixel(60, 6));
+        assert!(!cpu.display.read_pixel(61, 6));
+        assert!(!cpu.display.read_pixel(62, 6));
+        assert!(!cpu.display.read_pixel(63, 6));
+        assert!(cpu.display.read_pixel(0, 6));
+        assert!(cpu.display.read_pixel(1, 6));
+        assert!(cpu.display.read_pixel(2, 6));
+        assert!(cpu.display.read_pixel(3, 6));
 
         assert_eq!(0b0, cpu.read_register(0xF));
         assert_eq!(pc + 2, cpu.pc);
@@ -1436,9 +1435,9 @@ mod tests {
 
     #[test]
     fn operation_dxyn_draw_vx_vy_n_with_vy_wrap() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0xD012);
         let op = cpu.operation(&opcode);
@@ -1452,23 +1451,23 @@ mod tests {
         cpu.memory[i + 1] = 0b00001111;
 
         op(&mut cpu, &opcode);
-        assert!(cpu.graphics.read_pixel(8, 31));
-        assert!(cpu.graphics.read_pixel(9, 31));
-        assert!(cpu.graphics.read_pixel(10, 31));
-        assert!(cpu.graphics.read_pixel(11, 31));
-        assert!(!cpu.graphics.read_pixel(12, 31));
-        assert!(!cpu.graphics.read_pixel(13, 31));
-        assert!(!cpu.graphics.read_pixel(14, 31));
-        assert!(!cpu.graphics.read_pixel(15, 31));
+        assert!(cpu.display.read_pixel(8, 31));
+        assert!(cpu.display.read_pixel(9, 31));
+        assert!(cpu.display.read_pixel(10, 31));
+        assert!(cpu.display.read_pixel(11, 31));
+        assert!(!cpu.display.read_pixel(12, 31));
+        assert!(!cpu.display.read_pixel(13, 31));
+        assert!(!cpu.display.read_pixel(14, 31));
+        assert!(!cpu.display.read_pixel(15, 31));
 
-        assert!(!cpu.graphics.read_pixel(8, 0));
-        assert!(!cpu.graphics.read_pixel(9, 0));
-        assert!(!cpu.graphics.read_pixel(10, 0));
-        assert!(!cpu.graphics.read_pixel(11, 0));
-        assert!(cpu.graphics.read_pixel(12, 0));
-        assert!(cpu.graphics.read_pixel(13, 0));
-        assert!(cpu.graphics.read_pixel(14, 0));
-        assert!(cpu.graphics.read_pixel(15, 0));
+        assert!(!cpu.display.read_pixel(8, 0));
+        assert!(!cpu.display.read_pixel(9, 0));
+        assert!(!cpu.display.read_pixel(10, 0));
+        assert!(!cpu.display.read_pixel(11, 0));
+        assert!(cpu.display.read_pixel(12, 0));
+        assert!(cpu.display.read_pixel(13, 0));
+        assert!(cpu.display.read_pixel(14, 0));
+        assert!(cpu.display.read_pixel(15, 0));
 
         assert_eq!(0b0, cpu.read_register(0xF));
         assert_eq!(pc + 2, cpu.pc);
@@ -1476,9 +1475,9 @@ mod tests {
 
     #[test]
     fn operation_fx07_load_vx_dt() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0xF007);
         let op = cpu.operation(&opcode);
@@ -1494,9 +1493,9 @@ mod tests {
 
     #[test]
     fn operation_fx15_load_dt_vx() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0xF015);
         let op = cpu.operation(&opcode);
@@ -1512,9 +1511,9 @@ mod tests {
 
     #[test]
     fn operation_fx18_load_st_vx() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0xF018);
         let op = cpu.operation(&opcode);
@@ -1530,9 +1529,9 @@ mod tests {
 
     #[test]
     fn operation_fx1e_add_i_vx() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0xF01E);
         let op = cpu.operation(&opcode);
@@ -1548,9 +1547,9 @@ mod tests {
 
     #[test]
     fn operation_fx29_load_i_vx_font() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0xF029);
         let op = cpu.operation(&opcode);
@@ -1565,9 +1564,9 @@ mod tests {
 
     #[test]
     fn operation_fx33_load_bcd_vx() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0xF033);
         let op = cpu.operation(&opcode);
@@ -1585,9 +1584,9 @@ mod tests {
 
     #[test]
     fn operation_fx55_load_through_vx() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0xF555);
         let op = cpu.operation(&opcode);
@@ -1615,9 +1614,9 @@ mod tests {
 
     #[test]
     fn operation_fx65_read_through_vx() {
-        let mut graphics = graphics::Display::new();
+        let display = graphics::Display::new();
         let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
+        let mut cpu = Cpu::new(&rom, display);
 
         let opcode = Opcode::new(0xF565);
         let op = cpu.operation(&opcode);
