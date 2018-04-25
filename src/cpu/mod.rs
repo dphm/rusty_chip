@@ -9,7 +9,6 @@ extern crate rand;
 
 mod opcode;
 mod ops;
-mod pointer;
 mod timer;
 
 use self::rand::Rng;
@@ -17,7 +16,6 @@ use std::ops::Range;
 
 use cpu::ops::Operation;
 use cpu::opcode::Opcode;
-use cpu::pointer::Pointer;
 use cpu::timer::Timer;
 use memory::Memory;
 use output::{font, graphics};
@@ -29,9 +27,9 @@ type Register = usize;
 pub struct Cpu<'a, G: 'a> where G: graphics::GraphicsOutput {
     pub exit: bool,
     pub beep: bool,
-    pc: Pointer,
-    sp: Pointer,
-    i: Pointer,
+    pc: Address,
+    sp: Address,
+    i: Address,
     dt: Timer,
     st: Timer,
     v: [Byte; NUM_REGISTERS],
@@ -48,9 +46,9 @@ impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
         Cpu {
             exit: false,
             beep: true,
-            pc: Pointer::new(ROM_RANGE),
-            sp: Pointer::new(STACK_RANGE),
-            i: Pointer::new(FONT_RANGE.start..ROM_RANGE.end),
+            pc: ROM_RANGE.start,
+            sp: STACK_RANGE.start,
+            i: FONT_RANGE.start,
             dt: Timer::new(60, 60),
             st: Timer::new(60, 60),
             v: [0x0; NUM_REGISTERS],
@@ -68,7 +66,7 @@ impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
     }
 
     pub fn fetch_opcode(&self) -> Opcode {
-        let current = self.pc.current;
+        let current = self.pc;
         let bytes = (self.memory[current], self.memory[current + 1]);
         Opcode::from_bytes(bytes)
     }
@@ -134,16 +132,24 @@ impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
         }
     }
 
-    fn skip(&mut self) {
-        self.pc.move_forward();
+    fn advance_pc(&mut self) {
+        self.pc += 2;
+    }
+
+    fn advance_sp(&mut self) {
+        self.sp += 2;
+    }
+
+    fn retract_sp(&mut self) {
+        self.sp -= 2;
     }
 
     fn read_i(&self) -> Address {
-        self.i.current
+        self.i
     }
 
     fn load_i(&mut self, addr: Address) {
-        self.i.set(addr);
+        self.i = addr;
     }
 
     fn load_register(&mut self, register: Register, val: Byte) {
@@ -204,16 +210,16 @@ impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
     }
 
     fn stack_pop(&mut self) -> Address {
-        let current = self.sp.current;
+        let current = self.sp;
         let addr = (self.memory[current] as Address) << 8 | (self.memory[current + 1] as Address);
-        self.sp.move_backward();
+        self.retract_sp();
         addr
     }
 
     fn stack_push(&mut self) {
-        self.sp.move_forward();
-        let current = self.sp.current;
-        let addr = self.pc.current;
+        self.advance_sp();
+        let current = self.sp;
+        let addr = self.pc;
         self.memory[current] = ((addr & 0xFF00) >> 8) as Byte;
         self.memory[current + 1] = (addr & 0x00FF) as Byte;
     }
@@ -221,7 +227,7 @@ impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
 
 impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
     fn no_op(&mut self, _opcode: &Opcode) {
-        self.pc.move_forward();
+        self.advance_pc();
     }
 
     fn unknown(&mut self, opcode: &Opcode) {
@@ -230,64 +236,64 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
 
     fn clear_display(&mut self, _opcode: &Opcode) {
         self.graphics.clear();
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tCLS");
     }
 
     fn return_from_subroutine(&mut self, _opcode: &Opcode) {
         let addr = self.stack_pop();
-        self.pc.set(addr);
-        self.pc.move_forward();
+        self.pc = addr;
+        self.advance_pc();
         println!("\tRTN => {:x}", addr);
     }
 
     fn jump_addr(&mut self, opcode: &Opcode) {
         let addr = opcode.nnn();
 
-        if self.pc.current == addr {
+        if self.pc == addr {
             self.exit = true;
             return;
         }
 
-        self.pc.set(addr);
+        self.pc = addr;
         println!("\tJP {:x}", addr);
     }
 
     fn call_addr(&mut self, opcode: &Opcode) {
         let addr = opcode.nnn();
         self.stack_push();
-        self.pc.set(addr);
+        self.pc = addr;
         println!("\tCALL {:x}", addr);
     }
 
     fn skip_equal_vx_byte(&mut self, opcode: &Opcode) {
         let vx = self.read_register(opcode.x());
         let byte = opcode.kk();
-        if vx == byte { self.skip(); }
-        self.pc.move_forward();
+        if vx == byte { self.advance_pc(); }
+        self.advance_pc();
         println!("\tSE vx: {:x}, byte: {:x}", vx, byte);
     }
 
     fn skip_not_equal_vx_byte(&mut self, opcode: &Opcode) {
         let vx = self.read_register(opcode.x());
         let byte = opcode.kk();
-        if vx != byte { self.skip(); }
-        self.pc.move_forward();
+        if vx != byte { self.advance_pc(); }
+        self.advance_pc();
         println!("\tSNE vx: {:x}, byte: {:x}", vx, byte);
     }
 
     fn skip_equal_vx_vy(&mut self, opcode: &Opcode) {
         let vx = self.read_register(opcode.x());
         let vy = self.read_register(opcode.y());
-        if vx == vy { self.skip(); }
-        self.pc.move_forward();
+        if vx == vy { self.advance_pc(); }
+        self.advance_pc();
         println!("\tSE vx: {:x}, vy: {:x}", vx, vy);
     }
 
     fn load_vx_byte(&mut self, opcode: &Opcode) {
         let x = opcode.x();
         self.load_register(x, opcode.kk());
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tLD V{:x}, byte: {:x} => {:x}", x, opcode.kk(), self.read_register(x));
     }
 
@@ -296,7 +302,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         let byte = opcode.kk();
         let vx = self.read_register(x);
         self.load_register(x, vx.wrapping_add(byte));
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tADD V{:x}: {:x}, byte: {:x} => {:x}", x, vx, byte, self.read_register(x));
     }
 
@@ -305,7 +311,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         let y = opcode.y();
         let vy = self.read_register(y);
         self.load_register(x, vy);
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tLD V{:x}, V{:x}: {:x} => {:x}", x, y, vy, self.read_register(x));
     }
 
@@ -315,7 +321,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         let vx = self.read_register(x);
         let vy = self.read_register(y);
         self.load_register(x, vx | vy);
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tOR V{:x}: {:x}, V{:x}: {:x} => {:x}", x, vx, y, vy, self.read_register(x));
     }
 
@@ -325,7 +331,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         let vx = self.read_register(x);
         let vy = self.read_register(y);
         self.load_register(x, vx & vy);
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tAND V{:x}: {:x}, V{:x}: {:x} => {:x}", x, vx, y, vy, self.read_register(x));
     }
 
@@ -335,7 +341,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         let vx = self.read_register(x);
         let vy = self.read_register(y);
         self.load_register(x, vx ^ vy);
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tXOR V{:x}: {:x}, V{:x}: {:x} => {:x}", x, vx, y, vy, self.read_register(x));
     }
 
@@ -347,7 +353,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         let (result, carry) = vx.overflowing_add(vy);
         self.load_register(x, result);
         self.load_flag(carry);
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tADD V{:x}: {:x}, V{:x}: {:x} => ({:x}, {})", x, vx, y, vy, self.read_register(x), self.read_register(0xF));
     }
 
@@ -359,7 +365,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         let (result, borrow) = vx.overflowing_sub(vy);
         self.load_register(x, result);
         self.load_flag(!borrow);
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tSUB V{:x}: {:x}, V{:x}: {:x} => ({:x}, {})", x, vx, y, vy, self.read_register(x), self.read_register(0xF));
     }
 
@@ -370,7 +376,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         let bit = vy % 2;
         self.load_register(x, vy.wrapping_shr(1));
         self.load_flag(bit == 1);
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tSHR V{:x}, V{:x}: {:x} => ({:x}, {})", x, y, vy, self.read_register(x), self.read_register(0xF));
     }
 
@@ -382,7 +388,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         let (result, borrow) = vy.overflowing_sub(vx);
         self.load_register(x, result);
         self.load_flag(!borrow);
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tSUBN V{:x}: {:x}, V{:x}: {:x} => ({:x}, {})", x, vx, y, vy, self.read_register(x), self.read_register(0xF));
     }
 
@@ -393,7 +399,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         let bit = vy >> 7;
         self.load_register(x, vy.wrapping_shl(1));
         self.load_flag(bit == 1);
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tSHL V{:x}, V{:x}: {:x} => ({:x}, {})", x, y, vy, self.read_register(x), self.read_register(0xF));
     }
 
@@ -402,22 +408,22 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         let y = opcode.y();
         let vx = self.read_register(x);
         let vy = self.read_register(y);
-        if vx != vy { self.skip(); }
-        self.pc.move_forward();
+        if vx != vy { self.advance_pc(); }
+        self.advance_pc();
         println!("\tSNE V{:x}: {:x}, V{:x}: {:x}", x, vx, y, vy);
     }
 
     fn load_i_addr(&mut self, opcode: &Opcode) {
         let addr = opcode.nnn();
         self.load_i(addr);
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tLD I, {:x} => {:x}", addr, self.read_i());
     }
 
     fn jump_v0_addr(&mut self, opcode: &Opcode) {
         let v0 = self.read_register(0x0) as Address;
         let addr = opcode.nnn();
-        self.pc.set(addr + v0);
+        self.pc = addr + v0;
         println!("\tJP V0: {:x}, {:x}", v0, addr);
     }
 
@@ -426,7 +432,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         let byte = opcode.kk();
         let random_byte: Byte = rand::thread_rng().gen_range(0x0, 0xFF);
         self.load_register(x, random_byte & byte);
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tRND V{:x} => {:x}", x, self.read_register(x));
     }
 
@@ -446,7 +452,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
 
         self.load_flag(collision);
         self.graphics.draw();
-        self.pc.move_forward();
+        self.advance_pc();
 
         println!("\tDRW Vx: {:x}, Vy: {:x}, {:?}", vx, vy, sprite_bytes);
     }
@@ -458,7 +464,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         let x = opcode.x();
         let dt = self.read_delay_timer();
         self.load_register(x, dt);
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tLD V{:x}, DT: {:x} => {:x}", x, dt, self.read_register(x));
     }
 
@@ -468,7 +474,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         let x = opcode.x();
         let vx = self.read_register(x);
         self.load_delay_timer(vx);
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tLD DT, V{:x}: {:x} => {:x}", x, vx, self.read_delay_timer());
     }
 
@@ -476,7 +482,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         let x = opcode.x();
         let vx = self.read_register(x);
         self.load_sound_timer(vx);
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tLD ST, V{:x}: {:x} => {:x}", x, vx, self.read_sound_timer());
     }
 
@@ -485,7 +491,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         let x = opcode.x();
         let vx = self.read_register(x) as Address;
         self.load_i(i.wrapping_add(vx));
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tADD I: {:x}, V{:x}: {:x} => {:x}", i, x, vx, self.read_i());
     }
 
@@ -493,7 +499,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         let x = opcode.x();
         let vx = self.read_register(x) as Address;
         self.load_i(vx * font::SPRITE_HEIGHT);
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tLD I, FONT V{:x}: {:x} => {:x}", x, vx, self.read_i());
     }
 
@@ -504,7 +510,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
         self.memory[i + 0] = vx / 100;
         self.memory[i + 1] = vx % 100 / 10;
         self.memory[i + 2] = vx % 10;
-        self.pc.move_forward();
+        self.advance_pc();
         println!("\tLD BCD V{:x}: {:x} ({}) => {:?}", x, vx, vx, self.memory[i..i + 2].to_vec());
     }
 
@@ -516,7 +522,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
             self.load_byte(i + addr, *byte);
         }
         self.load_i(i + x + 1);
-        self.pc.move_forward();
+        self.advance_pc();
 
         let i = self.read_i();
         let register_bytes: Vec<Byte> = (0..x + 1).map(|r| self.read_register(r)).collect();
@@ -531,7 +537,7 @@ impl<'a, G> Operation for Cpu<'a, G> where G: graphics::GraphicsOutput {
             self.load_register(r, *byte);
         }
         self.load_i(i + x + 1);
-        self.pc.move_forward();
+        self.advance_pc();
 
         let i = self.read_i();
         let register_bytes: Vec<Byte> = (0..x + 1).map(|r| self.read_register(r)).collect();
@@ -584,12 +590,12 @@ mod tests {
 
         let opcode = Opcode::new(0x0000);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
         let memory = cpu.memory.clone();
 
         op(&mut cpu, &opcode);
         assert_eq!(memory, cpu.memory);
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -600,7 +606,7 @@ mod tests {
 
         let opcode = Opcode::new(0x00E0);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         op(&mut cpu, &opcode);
         for x in 0..graphics::SCREEN_WIDTH {
@@ -608,7 +614,7 @@ mod tests {
                 assert!(!cpu.graphics.read_pixel(x, y));
             }
         }
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -619,15 +625,15 @@ mod tests {
 
         let opcode = Opcode::new(0x00EE);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.stack_push();
-        cpu.pc.move_forward();
-        cpu.pc.move_forward();
-        cpu.pc.move_forward();
+        cpu.advance_pc();
+        cpu.advance_pc();
+        cpu.advance_pc();
 
         op(&mut cpu, &opcode);
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -640,7 +646,7 @@ mod tests {
         let op = cpu.operation(&opcode);
 
         op(&mut cpu, &opcode);
-        assert_eq!(0x404, cpu.pc.current);
+        assert_eq!(0x404, cpu.pc);
     }
 
     #[test]
@@ -653,9 +659,9 @@ mod tests {
         let op = cpu.operation(&opcode);
 
         op(&mut cpu, &opcode);
-        assert_eq!(0x404, cpu.pc.current);
-        assert_eq!(0x02, cpu.memory[cpu.sp.current]);
-        assert_eq!(0x00, cpu.memory[cpu.sp.current + 1]);
+        assert_eq!(0x404, cpu.pc);
+        assert_eq!(0x02, cpu.memory[cpu.sp]);
+        assert_eq!(0x00, cpu.memory[cpu.sp + 1]);
     }
 
     #[test]
@@ -666,12 +672,12 @@ mod tests {
 
         let opcode = Opcode::new(0x3123);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x1] = 0x23;
 
         op(&mut cpu, &opcode);
-        assert_eq!(pc + 4, cpu.pc.current);
+        assert_eq!(pc + 4, cpu.pc);
     }
 
     #[test]
@@ -682,12 +688,12 @@ mod tests {
 
         let opcode = Opcode::new(0x3122);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
         
         cpu.v[0x1] = 0x23;
 
         op(&mut cpu, &opcode);
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -698,12 +704,12 @@ mod tests {
 
         let opcode = Opcode::new(0x4123);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x1] = 0x22;
 
         op(&mut cpu, &opcode);
-        assert_eq!(pc + 4, cpu.pc.current);
+        assert_eq!(pc + 4, cpu.pc);
     }
 
     #[test]
@@ -714,12 +720,12 @@ mod tests {
 
         let opcode = Opcode::new(0x4123);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x1] = 0x23;
 
         op(&mut cpu, &opcode);
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -730,13 +736,13 @@ mod tests {
 
         let opcode = Opcode::new(0x5010);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x23;
         cpu.v[0x1] = cpu.v[0x0];
 
         op(&mut cpu, &opcode);
-        assert_eq!(pc + 4, cpu.pc.current);
+        assert_eq!(pc + 4, cpu.pc);
     }
 
     #[test]
@@ -747,13 +753,13 @@ mod tests {
 
         let opcode = Opcode::new(0x5010);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x23;
         cpu.v[0x1] = 0x22;
 
         op(&mut cpu, &opcode);
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -764,11 +770,11 @@ mod tests {
 
         let opcode = Opcode::new(0x6123);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         op(&mut cpu, &opcode);
         assert_eq!(0x23, cpu.read_register(0x1));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -779,11 +785,11 @@ mod tests {
 
         let opcode = Opcode::new(0x71FF);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         op(&mut cpu, &opcode);
         assert_eq!(0xFF, cpu.read_register(0x1));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -794,13 +800,13 @@ mod tests {
 
         let opcode = Opcode::new(0x71FF);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x1] = 0x02;
 
         op(&mut cpu, &opcode);
         assert_eq!(0x01, cpu.read_register(0x1));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -811,13 +817,13 @@ mod tests {
 
         let opcode = Opcode::new(0x8010);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x1] = 0x23;
 
         op(&mut cpu, &opcode);
         assert_eq!(0x23, cpu.read_register(0x0));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -828,14 +834,14 @@ mod tests {
 
         let opcode = Opcode::new(0x8011);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x0;
         cpu.v[0x1] = 0x0;
 
         op(&mut cpu, &opcode);
         assert_eq!(0x0, cpu.read_register(0x0));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -846,14 +852,14 @@ mod tests {
 
         let opcode = Opcode::new(0x8011);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x0;
         cpu.v[0x1] = 0x1;
 
         op(&mut cpu, &opcode);
         assert_eq!(0x1, cpu.read_register(0x0));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -864,14 +870,14 @@ mod tests {
 
         let opcode = Opcode::new(0x8011);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x1;
         cpu.v[0x1] = 0x0;
 
         op(&mut cpu, &opcode);
         assert_eq!(0x1, cpu.read_register(0x0));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -882,14 +888,14 @@ mod tests {
 
         let opcode = Opcode::new(0x8011);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x1;
         cpu.v[0x1] = 0x1;
 
         op(&mut cpu, &opcode);
         assert_eq!(0x1, cpu.read_register(0x0));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -900,14 +906,14 @@ mod tests {
 
         let opcode = Opcode::new(0x8012);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x0;
         cpu.v[0x1] = 0x0;
 
         op(&mut cpu, &opcode);
         assert_eq!(0x0, cpu.read_register(0x0));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -918,14 +924,14 @@ mod tests {
 
         let opcode = Opcode::new(0x8012);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x0;
         cpu.v[0x1] = 0x1;
 
         op(&mut cpu, &opcode);
         assert_eq!(0x0, cpu.read_register(0x0));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -936,14 +942,14 @@ mod tests {
 
         let opcode = Opcode::new(0x8012);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x1;
         cpu.v[0x1] = 0x0;
 
         op(&mut cpu, &opcode);
         assert_eq!(0x0, cpu.read_register(0x0));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -954,14 +960,14 @@ mod tests {
 
         let opcode = Opcode::new(0x8012);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x1;
         cpu.v[0x1] = 0x1;
 
         op(&mut cpu, &opcode);
         assert_eq!(0x1, cpu.read_register(0x0));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -972,14 +978,14 @@ mod tests {
 
         let opcode = Opcode::new(0x8013);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x0;
         cpu.v[0x1] = 0x0;
 
         op(&mut cpu, &opcode);
         assert_eq!(0x0, cpu.read_register(0x0));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -990,14 +996,14 @@ mod tests {
 
         let opcode = Opcode::new(0x8013);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x0;
         cpu.v[0x1] = 0x1;
 
         op(&mut cpu, &opcode);
         assert_eq!(0x1, cpu.read_register(0x0));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1008,14 +1014,14 @@ mod tests {
 
         let opcode = Opcode::new(0x8013);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x1;
         cpu.v[0x1] = 0x0;
 
         op(&mut cpu, &opcode);
         assert_eq!(0x1, cpu.read_register(0x0));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1026,14 +1032,14 @@ mod tests {
 
         let opcode = Opcode::new(0x8013);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x1;
         cpu.v[0x1] = 0x1;
 
         op(&mut cpu, &opcode);
         assert_eq!(0x0, cpu.read_register(0x0));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1044,7 +1050,7 @@ mod tests {
 
         let opcode = Opcode::new(0x8014);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x01;
         cpu.v[0x1] = 0x02;
@@ -1052,7 +1058,7 @@ mod tests {
         op(&mut cpu, &opcode);
         assert_eq!(0x03, cpu.read_register(0x0));
         assert_eq!(0b0, cpu.read_register(0xF));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1063,7 +1069,7 @@ mod tests {
 
         let opcode = Opcode::new(0x8014);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0xFF;
         cpu.v[0x1] = 0x02;
@@ -1071,7 +1077,7 @@ mod tests {
         op(&mut cpu, &opcode);
         assert_eq!(0x01, cpu.read_register(0x0));
         assert_eq!(0b1, cpu.read_register(0xF));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1082,7 +1088,7 @@ mod tests {
 
         let opcode = Opcode::new(0x8015);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x02;
         cpu.v[0x1] = 0x01;
@@ -1090,7 +1096,7 @@ mod tests {
         op(&mut cpu, &opcode);
         assert_eq!(0x01, cpu.read_register(0x0));
         assert_eq!(0b1, cpu.read_register(0xF));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1101,7 +1107,7 @@ mod tests {
 
         let opcode = Opcode::new(0x8015);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x01;
         cpu.v[0x1] = 0x02;
@@ -1109,7 +1115,7 @@ mod tests {
         op(&mut cpu, &opcode);
         assert_eq!(0xFF, cpu.read_register(0x0));
         assert_eq!(0b0, cpu.read_register(0xF));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1120,14 +1126,14 @@ mod tests {
 
         let opcode = Opcode::new(0x8016);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x1] = 0b11111110;
 
         op(&mut cpu, &opcode);
         assert_eq!(0b01111111, cpu.read_register(0x0));
         assert_eq!(0b0, cpu.read_register(0xF));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1138,14 +1144,14 @@ mod tests {
 
         let opcode = Opcode::new(0x8016);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x1] = 0b11111111;
 
         op(&mut cpu, &opcode);
         assert_eq!(0b01111111, cpu.read_register(0x0));
         assert_eq!(0b1, cpu.read_register(0xF));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1156,7 +1162,7 @@ mod tests {
 
         let opcode = Opcode::new(0x8017);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x01;
         cpu.v[0x1] = 0x02;
@@ -1164,7 +1170,7 @@ mod tests {
         op(&mut cpu, &opcode);
         assert_eq!(0x01, cpu.read_register(0x0));
         assert_eq!(0b1, cpu.read_register(0xF));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1175,7 +1181,7 @@ mod tests {
 
         let opcode = Opcode::new(0x8017);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x02;
         cpu.v[0x1] = 0x01;
@@ -1183,7 +1189,7 @@ mod tests {
         op(&mut cpu, &opcode);
         assert_eq!(0xFF, cpu.read_register(0x0));
         assert_eq!(0b0, cpu.read_register(0xF));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1194,14 +1200,14 @@ mod tests {
 
         let opcode = Opcode::new(0x801E);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x1] = 0b01111111;
 
         op(&mut cpu, &opcode);
         assert_eq!(0b11111110, cpu.read_register(0x0));
         assert_eq!(0b0, cpu.read_register(0xF));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1212,14 +1218,14 @@ mod tests {
 
         let opcode = Opcode::new(0x801E);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x1] = 0b11111111;
 
         op(&mut cpu, &opcode);
         assert_eq!(0b11111110, cpu.read_register(0x0));
         assert_eq!(0b1, cpu.read_register(0xF));   
-        assert_eq!(pc + 2, cpu.pc.current);     
+        assert_eq!(pc + 2, cpu.pc);     
     }
 
     #[test]
@@ -1230,13 +1236,13 @@ mod tests {
 
         let opcode = Opcode::new(0x9010);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x23;
         cpu.v[0x1] = 0x22;
 
         op(&mut cpu, &opcode);
-        assert_eq!(pc + 4, cpu.pc.current);
+        assert_eq!(pc + 4, cpu.pc);
     }
 
     #[test]
@@ -1247,13 +1253,13 @@ mod tests {
 
         let opcode = Opcode::new(0x9010);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x23;
         cpu.v[0x1] = cpu.v[0x0];
 
         op(&mut cpu, &opcode);
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1264,11 +1270,11 @@ mod tests {
 
         let opcode = Opcode::new(0xA456);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         op(&mut cpu, &opcode);
         assert_eq!(0x456, cpu.read_i());
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1283,7 +1289,7 @@ mod tests {
         cpu.v[0x0] = 0x08;
 
         op(&mut cpu, &opcode);
-        assert_eq!(0x308, cpu.pc.current);
+        assert_eq!(0x308, cpu.pc);
     }
 
     #[test]
@@ -1296,11 +1302,11 @@ mod tests {
         let op = cpu.operation(&opcode);
 
         for _ in 0..1000 {
-            let pc = cpu.pc.current;
+            let pc = cpu.pc;
 
             op(&mut cpu, &opcode);
             assert!(cpu.read_register(0x0) <= 0xF);
-            assert_eq!(pc + 2, cpu.pc.current);
+            assert_eq!(pc + 2, cpu.pc);
         }
     }
 
@@ -1312,7 +1318,7 @@ mod tests {
 
         let opcode = Opcode::new(0xD012);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.load_i(ROM_RANGE.start);
         let i = cpu.read_i();
@@ -1341,7 +1347,7 @@ mod tests {
         assert!(cpu.graphics.read_pixel(15, 6));
 
         assert_eq!(0b0, cpu.read_register(0xF));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1352,7 +1358,7 @@ mod tests {
 
         let opcode = Opcode::new(0xD012);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.load_i(ROM_RANGE.start);
         let i = cpu.read_i();
@@ -1383,7 +1389,7 @@ mod tests {
         assert!(cpu.graphics.read_pixel(15, 6));
 
         assert_eq!(0b1, cpu.read_register(0xF));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1394,7 +1400,7 @@ mod tests {
 
         let opcode = Opcode::new(0xD012);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.load_i(ROM_RANGE.start);
         let i = cpu.read_i();
@@ -1423,7 +1429,7 @@ mod tests {
         assert!(cpu.graphics.read_pixel(3, 6));
 
         assert_eq!(0b0, cpu.read_register(0xF));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1434,7 +1440,7 @@ mod tests {
 
         let opcode = Opcode::new(0xD012);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.load_i(ROM_RANGE.start);
         let i = cpu.read_i();
@@ -1463,7 +1469,7 @@ mod tests {
         assert!(cpu.graphics.read_pixel(15, 0));
 
         assert_eq!(0b0, cpu.read_register(0xF));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1474,14 +1480,14 @@ mod tests {
 
         let opcode = Opcode::new(0xF007);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         let time = 0x20;
         cpu.dt.set(time);
 
         op(&mut cpu, &opcode);
         assert_eq!(time, cpu.read_register(0x0));
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1492,14 +1498,14 @@ mod tests {
 
         let opcode = Opcode::new(0xF015);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         let time = 0x20;
         cpu.v[0x0] = time;
 
         op(&mut cpu, &opcode);
         assert_eq!(time, cpu.read_delay_timer());
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1510,14 +1516,14 @@ mod tests {
 
         let opcode = Opcode::new(0xF018);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         let time = 0x20;
         cpu.v[0x0] = time;
 
         op(&mut cpu, &opcode);
         assert_eq!(time, cpu.read_sound_timer());
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1528,14 +1534,14 @@ mod tests {
 
         let opcode = Opcode::new(0xF01E);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
         let i = cpu.read_i();
 
         cpu.v[0x0] = 0x08;
 
         op(&mut cpu, &opcode);
         assert_eq!(i + 0x08, cpu.read_i());
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1546,13 +1552,13 @@ mod tests {
 
         let opcode = Opcode::new(0xF029);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.v[0x0] = 0x02;
 
         op(&mut cpu, &opcode);
         assert_eq!(FONT_RANGE.start + 10, cpu.read_i());
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1563,7 +1569,7 @@ mod tests {
 
         let opcode = Opcode::new(0xF033);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
         let i = cpu.read_i();
 
         cpu.v[0x0] = 0xFE;
@@ -1572,7 +1578,7 @@ mod tests {
         assert_eq!(0x02, cpu.memory[i + 0]);
         assert_eq!(0x05, cpu.memory[i + 1]);
         assert_eq!(0x04, cpu.memory[i + 2]);
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1583,7 +1589,7 @@ mod tests {
 
         let opcode = Opcode::new(0xF555);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.load_i(ROM_RANGE.start);
         let i = cpu.read_i();
@@ -1602,7 +1608,7 @@ mod tests {
         assert_eq!(0xBB, cpu.memory[i + 4]);
         assert_eq!(0xAA, cpu.memory[i + 5]);
         assert_eq!(i + 6, cpu.read_i());
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
@@ -1613,7 +1619,7 @@ mod tests {
 
         let opcode = Opcode::new(0xF565);
         let op = cpu.operation(&opcode);
-        let pc = cpu.pc.current;
+        let pc = cpu.pc;
 
         cpu.load_i(ROM_RANGE.start);
         let i = cpu.read_i();
@@ -1632,7 +1638,7 @@ mod tests {
         assert_eq!(0xBB, cpu.read_register(0x4));
         assert_eq!(0xAA, cpu.read_register(0x5));
         assert_eq!(i + 6, cpu.read_i());
-        assert_eq!(pc + 2, cpu.pc.current);
+        assert_eq!(pc + 2, cpu.pc);
     }
 
     #[test]
