@@ -9,14 +9,12 @@ extern crate rand;
 
 mod opcode;
 mod ops;
-mod timer;
 
 use self::rand::Rng;
 use std::ops::Range;
 
 use cpu::ops::Operation;
 use cpu::opcode::Opcode;
-use cpu::timer::Timer;
 use memory::Memory;
 use output::{font, graphics};
 
@@ -30,8 +28,8 @@ pub struct Cpu<'a, G: 'a> where G: graphics::GraphicsOutput {
     pc: Address,
     sp: Address,
     i: Address,
-    dt: Timer,
-    st: Timer,
+    dt: Byte,
+    st: Byte,
     v: [Byte; NUM_REGISTERS],
     memory: Memory<Byte>,
     graphics: &'a mut G
@@ -49,8 +47,8 @@ impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
             pc: ROM_RANGE.start,
             sp: STACK_RANGE.start,
             i: FONT_RANGE.start,
-            dt: Timer::new(60, 60),
-            st: Timer::new(60, 60),
+            dt: 60,
+            st: 60,
             v: [0x0; NUM_REGISTERS],
             memory,
             graphics
@@ -132,6 +130,11 @@ impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
         }
     }
 
+    pub fn update_timers(&mut self) {
+        self.dt.saturating_sub(1);
+        self.st.saturating_sub(1);
+    }
+
     fn advance_pc(&mut self) {
         self.pc += 2;
     }
@@ -188,25 +191,19 @@ impl<'a, G> Cpu<'a, G> where G: graphics::GraphicsOutput {
     }
 
     fn read_delay_timer(&self) -> Byte {
-        self.dt.current
+        self.dt
     }
 
     fn load_delay_timer(&mut self, val: Byte) {
-        self.dt.set(val);
+        self.dt = val;
     }
 
     fn read_sound_timer(&mut self) -> Byte {
-        self.st.current
+        self.st
     }
 
     fn load_sound_timer(&mut self, val: Byte) {
-        self.st.set(val);
-    }
-
-    fn update_timers(&mut self) {
-        self.dt.tick();
-        self.st.tick();
-        self.beep = self.st.active();
+        self.st = val;
     }
 
     fn stack_pop(&mut self) -> Address {
@@ -1483,7 +1480,7 @@ mod tests {
         let pc = cpu.pc;
 
         let time = 0x20;
-        cpu.dt.set(time);
+        cpu.dt = time;
 
         op(&mut cpu, &opcode);
         assert_eq!(time, cpu.read_register(0x0));
@@ -1639,23 +1636,5 @@ mod tests {
         assert_eq!(0xAA, cpu.read_register(0x5));
         assert_eq!(i + 6, cpu.read_i());
         assert_eq!(pc + 2, cpu.pc);
-    }
-
-    #[test]
-    fn beep_while_sound_timer_active() {
-        let mut graphics = graphics::Display::new();
-        let rom = Vec::new();
-        let mut cpu = Cpu::new(&rom, &mut graphics);
-
-        cpu.update_timers();
-
-        assert!(cpu.st.active());
-        assert!(cpu.beep);
-
-        cpu.st.set(0);
-        cpu.update_timers();
-
-        assert!(!cpu.st.active());
-        assert!(!cpu.beep);
     }
 }
