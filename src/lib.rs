@@ -1,31 +1,41 @@
+#![feature(proc_macro, wasm_custom_section, wasm_import_module)]
 #![feature(range_contains)]
 
-mod cpu;
+extern crate wasm_bindgen;
+use wasm_bindgen::prelude::*;
+
+pub mod cpu;
 pub mod output;
-
-use std::io::{BufReader, Read};
-use std::fs::File;
-use std::path::Path;
-
-use cpu::Cpu;
-use output::graphics::Display;
 
 type Byte = u8;
 type Address = usize;
 
-pub fn init_cpu(rom: &Vec<Byte>, display: Display) -> Cpu {
-    Cpu::new(rom, display)
+#[wasm_bindgen]
+extern {
+    #[wasm_bindgen(js_namespace = Math)]
+    fn random() -> f64;
 }
 
-pub fn load_rom(directory: &str, filename: &str) -> Vec<Byte> {
-    let path = Path::new(directory).join(filename);
-    let mut file = File::open(path).expect("Unable to open file");
-    read_bytes(&mut file)
+#[wasm_bindgen]
+pub struct WasmCpu {
+    cpu: cpu::Cpu
 }
 
-fn read_bytes(file: &mut File) -> Vec<Byte> {
-    let mut buf_reader = BufReader::new(file);
-    let mut contents = Vec::new();
-    buf_reader.read_to_end(&mut contents).expect("Unable to read file");
-    contents
+#[wasm_bindgen]
+impl WasmCpu {
+    pub fn new() -> WasmCpu {
+        let display = output::graphics::Display::new();
+
+        WasmCpu {
+            cpu: cpu::Cpu::new(display)
+        }
+    }
+
+    pub fn load_rom(&mut self, rom: &[Byte]) {
+        self.cpu.load_rom(rom);
+    }
+
+    pub fn exit(&self) -> bool {
+        self.cpu.exit
+    }
 }

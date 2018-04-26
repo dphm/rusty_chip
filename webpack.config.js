@@ -1,10 +1,19 @@
-var path = require('path');
+const path = require("path");
 
 module.exports = {
-  mode: 'development',
-  entry: './web/index.js',
+  entry: "./bootstrap.js",
   output: {
-    path: path.resolve(__dirname, 'web'),
-    filename: 'index.bundle.js'
-  }
+    path: path.resolve(__dirname, "dist"),
+    filename: "bootstrap.js",
+  },
+  module: {
+    rules: [
+      {
+        test: /\.ch8$/,
+        use: 'bin-loader'
+      }
+    ]
+  },
+  mode: "development"
 };
+

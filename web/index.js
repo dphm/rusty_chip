@@ -1,6 +1,10 @@
-const Audio = require('./audio.js')
-const Display = require('./display.js')
-const Keypad = require('./keypad.js')
+import logo from "../rom/logo.ch8";
+import { WasmCpu } from "./rusty_chip";
+import { memory } from "./rusty_chip_bg";
+
+import Audio from './audio';
+import Display from './display';
+import Keypad from './keypad';
 
 const canvas = document.getElementById('screen')
 const mute = document.getElementById('mute')
@@ -8,3 +12,6 @@ const mute = document.getElementById('mute')
 let display = new Display(canvas)
 let audio = new Audio(mute)
 let keypad = new Keypad()
+
+const cpu = WasmCpu.new()
+cpu.load_rom(logo)

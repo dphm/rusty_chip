@@ -1,22 +1,12 @@
-const NUM_REGISTERS: usize = 16;
-
-const MAX_ADDR: Address = 0x1000;
-const FONT_RANGE: Range<Address> = 0x0..0x200;
-const ROM_RANGE: Range<Address> = 0x200..0xFA0;
-const STACK_RANGE: Range<Address> = 0xFA0..MAX_ADDR;
-
-extern crate rand;
-
 mod opcode;
 mod ops;
 
-use self::rand::Rng;
 use std::ops::Range;
 
 use cpu::ops::Operation;
 use cpu::opcode::Opcode;
 use output::font;
-use output::graphics::Display;
+use output::graphics;
 
 use {Address, Byte};
 type Register = usize;
@@ -28,29 +18,34 @@ pub struct Cpu {
     i: Address,
     dt: Byte,
     st: Byte,
-    v: [Byte; NUM_REGISTERS],
-    memory: [Byte; MAX_ADDR],
-    display: Display
+    v: [Byte; Cpu::NUM_REGISTERS],
+    memory: [Byte; Cpu::MAX_ADDR],
+    display: graphics::Display
 }
 
 impl Cpu {
-    pub fn new(rom: &Vec<Byte>, display: Display) -> Cpu {
-        let mut cpu = Cpu {
+    pub const NUM_REGISTERS: usize = 16;
+    pub const MAX_ADDR: Address = 0x1000;
+    pub const FONT_RANGE: Range<Address> = 0x0..0x200;
+    pub const ROM_RANGE: Range<Address> = 0x200..0xFA0;
+    pub const STACK_RANGE: Range<Address> = 0xFA0..Cpu::MAX_ADDR;
+
+    pub fn new(display: graphics::Display) -> Cpu {
+        Cpu {
             exit: false,
-            pc: ROM_RANGE.start,
-            sp: STACK_RANGE.start,
-            i: FONT_RANGE.start,
+            pc: Cpu::ROM_RANGE.start,
+            sp: Cpu::STACK_RANGE.start,
+            i: Cpu::FONT_RANGE.start,
             dt: 60,
             st: 60,
-            v: [0x0; NUM_REGISTERS],
-            memory: [0x0; MAX_ADDR],
+            v: [0x0; Cpu::NUM_REGISTERS],
+            memory: [0x0; Cpu::MAX_ADDR],
             display
-        };
+        }
+    }
 
-        cpu.load_memory(&font::FONT_SET, FONT_RANGE);
-        cpu.load_memory(&rom, ROM_RANGE);
-
-        cpu
+    pub fn load_rom(&mut self, rom: &[Byte]) {
+        self.load_memory(rom, 0x200);
     }
 
     pub fn step(&mut self) {
@@ -219,9 +214,9 @@ impl Cpu {
         self.memory[current + 1] = (addr & 0x00FF) as Byte;
     }
 
-    fn load_memory(&mut self, data: &[Byte], range: Range<Address>) {
+    fn load_memory(&mut self, data: &[Byte], addr: Address) {
         for i in 0..data.len() {
-            self.memory[range.start + i] = data[i].clone();
+            self.memory[addr + i] = data[i].clone();
         }
     }
 }
@@ -431,7 +426,7 @@ impl Operation for Cpu {
     fn rand_vx_byte(&mut self, opcode: &Opcode) {
         let x = opcode.x();
         let byte = opcode.kk();
-        let random_byte: Byte = rand::thread_rng().gen_range(0x0, 0xFF);
+        let random_byte: Byte = 0xFF;
         self.load_register(x, random_byte & byte);
         self.advance_pc();
         println!("\tRND V{:x} => {:x}", x, self.read_register(x));

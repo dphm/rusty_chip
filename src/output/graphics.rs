@@ -8,7 +8,7 @@ use Address;
 
 pub struct Display {
     redraw: bool,
-    memory: [bool; SCREEN_SIZE]
+    pub memory: [bool; SCREEN_SIZE]
 }
 
 impl Display {
