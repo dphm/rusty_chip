@@ -2,9 +2,9 @@ var path = require('path');
 
 module.exports = {
   mode: 'development',
-  entry: './web/index.js',
+  entry: './bootstrap.js',
   output: {
-    path: path.resolve(__dirname, 'web'),
-    filename: 'index.bundle.js'
+    path: path.resolve(__dirname, 'dist'),
+    filename: 'bootstrap.js'
   }
 };

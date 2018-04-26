@@ -1,63 +1,55 @@
-pub const SPRITE_WIDTH: usize = 8;
-pub const SCREEN_WIDTH: usize = 64;
-pub const SCREEN_HEIGHT: usize = 32;
-pub const SCREEN_WIDTH_SPRITES: usize = SCREEN_WIDTH / SPRITE_WIDTH;
-const SCREEN_SIZE: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
-
 use memory::Memory;
 use Address;
 
-pub trait GraphicsOutput {
-    fn read_pixel(&self, Address, Address) -> bool;
-    fn update_pixel(&mut self, Address, Address, bool) -> bool;
-    fn clear(&mut self);
-    fn draw(&mut self);
-}
-
+#[derive(Debug, PartialEq)]
 pub struct Display {
     redraw: bool,
     memory: Memory<bool>
 }
 
 impl Display {
+    pub const SPRITE_WIDTH: usize = 8;
+    pub const SCREEN_WIDTH: usize = 64;
+    pub const SCREEN_HEIGHT: usize = 32;
+    pub const SCREEN_WIDTH_SPRITES: usize = Display::SCREEN_WIDTH / Display::SPRITE_WIDTH;
+    const SCREEN_SIZE: usize = Display::SCREEN_WIDTH * Display::SCREEN_HEIGHT;
+
     pub fn new() -> Display {
         Display {
             redraw: false,
-            memory: Memory::new(SCREEN_SIZE, false)
+            memory: Memory::new(Display::SCREEN_SIZE, false)
         }
     }
-}
 
-impl GraphicsOutput for Display {
-    fn read_pixel(&self, x: Address, y: Address) -> bool {
-        let x = x % SCREEN_WIDTH;
-        let y = y % SCREEN_HEIGHT;
-        self.memory[y * SCREEN_WIDTH + x]
+    pub fn read_pixel(&self, x: Address, y: Address) -> bool {
+        let x = x % Display::SCREEN_WIDTH;
+        let y = y % Display::SCREEN_HEIGHT;
+        self.memory[y * Display::SCREEN_WIDTH + x]
     }
 
-    fn update_pixel(&mut self, x: Address, y: Address, val: bool) -> bool {
-        let x = x % SCREEN_WIDTH;
-        let y = y % SCREEN_HEIGHT;
+    pub fn update_pixel(&mut self, x: Address, y: Address, val: bool) -> bool {
+        let x = x % Display::SCREEN_WIDTH;
+        let y = y % Display::SCREEN_HEIGHT;
         let old = self.read_pixel(x, y);
         let collision = old & val;
         let new = old ^ val;
         if new != old {
-            self.memory[y * SCREEN_WIDTH + x] = new;
+            self.memory[y * Display::SCREEN_WIDTH + x] = new;
             self.redraw = true;
         }
         collision
     }
 
-    fn clear(&mut self) {
-        self.memory = Memory::new(SCREEN_SIZE, false);
+    pub fn clear(&mut self) {
+        self.memory = Memory::new(Display::SCREEN_SIZE, false);
     }
 
-    fn draw(&mut self) {
+    pub fn draw(&mut self) {
         if !self.redraw { return; }
 
         let lines = self.memory.iter().enumerate()
             .fold(String::new(), |mut acc, (i, bit)| {
-                if (i % SCREEN_WIDTH) == 0 {
+                if (i % Display::SCREEN_WIDTH) == 0 {
                     acc.push_str(&format!("\n{:02} ", i / 64));
                 }
 
@@ -83,7 +75,7 @@ mod tests {
         let d = Display::new();
         assert!(!d.redraw);
         assert!(d.memory.iter().all(|bit| *bit == false));
-        assert_eq!(SCREEN_SIZE, d.memory.len());
+        assert_eq!(Display::SCREEN_SIZE, d.memory.len());
     }
 
     #[test]
@@ -91,7 +83,7 @@ mod tests {
         let mut d = Display::new();
         let x = 8;
         let y = 30;
-        let i = y * SCREEN_WIDTH + x;
+        let i = y * Display::SCREEN_WIDTH + x;
 
         assert!(!d.read_pixel(x, y));
 
@@ -104,7 +96,7 @@ mod tests {
         let mut d = Display::new();
         let x = 64;
         let y = 30;
-        let i = y * SCREEN_WIDTH + 0;
+        let i = y * Display::SCREEN_WIDTH + 0;
 
         assert!(!d.read_pixel(x, y));
 
@@ -117,7 +109,7 @@ mod tests {
         let mut d = Display::new();
         let x = 8;
         let y = 30;
-        let i = y * SCREEN_WIDTH + x;
+        let i = y * Display::SCREEN_WIDTH + x;
 
         let collision = d.update_pixel(x, y, false);
         assert!(!d.memory[i], "false XOR false should set the pixel to false");
@@ -130,7 +122,7 @@ mod tests {
         let mut d = Display::new();
         let x = 8;
         let y = 30;
-        let i = y * SCREEN_WIDTH + x;
+        let i = y * Display::SCREEN_WIDTH + x;
 
         let collision = d.update_pixel(x, y, true);
         assert!(d.memory[i], "false XOR true should set the pixel to true");
@@ -143,7 +135,7 @@ mod tests {
         let mut d = Display::new();
         let x = 8;
         let y = 30;
-        let i = y * SCREEN_WIDTH + x;
+        let i = y * Display::SCREEN_WIDTH + x;
 
         d.memory[i] = true;
         let collision = d.update_pixel(x, y, false);
@@ -157,7 +149,7 @@ mod tests {
         let mut d = Display::new();
         let x = 8;
         let y = 30;
-        let i = y * SCREEN_WIDTH + x;
+        let i = y * Display::SCREEN_WIDTH + x;
 
         d.memory[i] = true;
         let collision = d.update_pixel(x, y, true);
@@ -171,7 +163,7 @@ mod tests {
         let mut d = Display::new();
         let x = 64;
         let y = 30;
-        let i = y * SCREEN_WIDTH + 0;
+        let i = y * Display::SCREEN_WIDTH + 0;
 
         d.memory[i] = true;
         let collision = d.update_pixel(x, y, true);
@@ -183,7 +175,7 @@ mod tests {
     #[test]
     fn clear_display() {
         let mut d = Display::new();
-        d.memory = Memory::new(SCREEN_SIZE, true);
+        d.memory = Memory::new(Display::SCREEN_SIZE, true);
 
         d.clear();
         assert!(d.memory.iter().all(|pixel| *pixel == false), "clear should set all pixels to false");

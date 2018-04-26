@@ -65,9 +65,9 @@ impl<T> ops::Index<Range<Address>> for Memory<T> {
     }
 }
 
-impl<T> fmt::Debug for Memory<T> where T: fmt::LowerHex {
+impl<T> fmt::Debug for Memory<T> where T: fmt::Debug {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let hex_vals = self.memory.iter().map(|val| format!("{:02x}", &val));
+        let hex_vals = self.memory.iter().map(|val| format!("{:?}", &val));
 
         let lines = hex_vals.enumerate()
             .fold(String::new(), |mut acc, (i, hex_val)| {

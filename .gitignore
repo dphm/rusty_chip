@@ -1,4 +1,5 @@
 
+/dist
 /target
 **/*.rs.bk
 **/node_modules
